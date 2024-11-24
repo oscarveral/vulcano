@@ -5,3 +5,4 @@ resolver = "2"
 [workspace.package]
 authors = ["Óscar Vera López <contact@oscarveral.dev>"]
 edition = "2021"
+license = "MIT"

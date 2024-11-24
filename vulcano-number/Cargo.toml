@@ -1,5 +1,8 @@
 [package]
 name = "vulcano-number"
 version = "0.1.0"
+description = "A library for handling numbers."
 edition.workspace = true
 authors.workspace = true
+license.workspace = true
+
