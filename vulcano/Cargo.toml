@@ -1,10 +1,10 @@
 [package]
 name = "vulcano"
-version = "0.1.0"
-description = "Everithing."
+version = "0.1.1"
+description = "Everything."
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
 [dependencies]
-vulcano-number = { path = "../vulcano-number" }
+vulcano-number = { version = "0.1.0" }
