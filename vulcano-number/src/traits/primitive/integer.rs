@@ -13,6 +13,7 @@ use crate::traits::{
         SaturatingMul, SaturatingSub, WrappingAdd, WrappingDiv, WrappingMul, WrappingNeg,
         WrappingSub,
     },
+    conversion::Convertible,
     size::Fixed,
 };
 
@@ -31,6 +32,19 @@ pub trait Integer:
     + CheckedNeg<Output = Self>
     + CheckedSub<Self, Output = Self>
     + Clone
+    + Convertible<Self>
+    + Convertible<u8>
+    + Convertible<u16>
+    + Convertible<u32>
+    + Convertible<u64>
+    + Convertible<u128>
+    + Convertible<usize>
+    + Convertible<i8>
+    + Convertible<i16>
+    + Convertible<i32>
+    + Convertible<i64>
+    + Convertible<i128>
+    + Convertible<isize>
     + Copy
     + Div<Self, Output = Self>
     + DivAssign<Self>
