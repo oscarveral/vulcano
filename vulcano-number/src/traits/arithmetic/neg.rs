@@ -45,7 +45,7 @@ macro_rules! impl_neg {
 
             #[inline]
             fn saturating_neg(self) -> Self::Output {
-                <$t>::saturating_neg(self)
+                <$t>::saturating_sub(0, self)
             }
         }
         impl WrappingNeg for $t {
