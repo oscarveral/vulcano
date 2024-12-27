@@ -6,3 +6,4 @@ resolver = "2"
 authors = ["Óscar Vera López <contact@oscarveral.dev>"]
 edition = "2021"
 license = "MIT"
+rust-version = "1.83.0"

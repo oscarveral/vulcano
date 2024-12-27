@@ -1,10 +1,11 @@
 [package]
 name = "vulcano"
 version = "0.1.1"
-description = "Everything."
+description = "Everything!"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 vulcano-number = { version = "0.1.0" }
