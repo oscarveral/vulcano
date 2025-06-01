@@ -5,4 +5,8 @@ edition = "2024"
 
 [dependencies]
 rand = "0.9.1"
+rayon = "1.10.0"
 rug = "1.27.0"
+
+[package.metadata.docs.rs]
+rustdoc-args = [ "--html-in-header", "./doc/katex.html" ]
