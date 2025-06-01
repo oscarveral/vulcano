@@ -1,26 +1,19 @@
-use dghv::Context;
+use rug::Complete;
 
 pub mod utils;
 
 fn main() {
-    
-
-    let mut fail = 0;
-    for _ in 0..200 {
+    for _ in 0..100 {
         let ctx = dghv::DGHV_CTX_MEDIUM;
         let (enc, dec) = ctx.key_gen();
         let ct = enc.encrypt(true);
         let res = dec.decrypt(&ct);
         println!("{res}");
-        if res != true {
-            fail += 1;
-        }
     }
-    println!("{}", fail as f32 / 200.0);
 }
 
 pub mod dghv {
-    use crate::utils::random::{new_rng_state, Randomizer};
+    use crate::utils::random::{Randomizer, new_rand_state};
     use rand::seq::IteratorRandom;
     use rayon::{
         iter::{IntoParallelRefMutIterator, ParallelIterator},
@@ -65,7 +58,7 @@ pub mod dghv {
         sk_width: 1558,
         pk_width: 843033,
         pk_count: 572,
-        security: 52
+        security: 52,
     };
 
     pub const DGHV_CTX_MEDIUM: Context = Context {
@@ -74,21 +67,21 @@ pub mod dghv {
         sk_width: 2128,
         pk_width: 4251866,
         pk_count: 2110,
-        security: 62
+        security: 62,
     };
 
-    pub const DGHV_CTX_LARGE: Context = Context{
+    pub const DGHV_CTX_LARGE: Context = Context {
         big_noise_width: 142,
         noise_width: 71,
         sk_width: 2698,
         pk_width: 19575950,
         pk_count: 7659,
-        security: 72
+        security: 72,
     };
-    
+
     impl Context {
-        /// Create a DGHV context using the recomended configuration.
-        /// Takes as input the desired security level.
+        /// Create a DGHV context using deriving all parameters.
+        /// Takes as input the desired security level used to derive the rest.
         pub fn create(security: u8) -> Option<Context> {
             // Bigger security values may produce param values bigger than 32-bit max value.
             if security > MAX_SECURITY {
@@ -112,15 +105,35 @@ pub mod dghv {
             })
         }
 
+        /// Estimates the maximum multiplication depth supported by the context.
+        /// This is a heuristic based on the approximate noise growth in DGHV.
+        /// Noise roughly squares its bit-length with each multiplication.
+        /// The formula used is $d < \log_2(\eta / (1 + \rho\'))$.
+        pub fn max_multiplication_depth(&self) -> u32 {
+            let eta = self.sk_width as f64;
+            let big_rho_prime = self.big_noise_width as f64;
+            let numerator = eta;
+            let denominator = 1.0 + big_rho_prime;
+            let ratio = numerator / denominator;
+            // If ratio is 1 or less, $log_2(ratio)$ would be 0 or negative.
+            // This means even a fresh ciphertext's noise might be too large,
+            // or no multiplications are supported.
+            if ratio <= 1.0 {
+                return 0;
+            }
+            let log2_ratio = ratio.log2();
+            // The maximum depth is the floor of this value
+            // (since $d$ must be an integer and $d < value$)
+            let max_depth = log2_ratio.floor() as u32;
+            max_depth
+        }
+
         /// Generate a secret key $p$ from the DGHV context.
         /// This function takes a sample $p\leftarrow(2\mathbb{Z}+1)\cap[2^{\eta-1}, 2^\eta)
         fn secret_key_sample(&self) -> Integer {
-            let sk_bound: Integer = Integer::from(1) << self.sk_width;
-            let p: Integer = sk_bound
-                .random_below_ref(&mut new_rng_state())
-                .complete()
-                + sk_bound
-                | 0x1;
+            let sk_bound: Integer = Integer::from(1) << (self.sk_width - 1);
+            let p: Integer =
+                sk_bound.random_below_ref(&mut new_rand_state()).complete() + sk_bound | 0x1;
             p
         }
 
@@ -130,14 +143,12 @@ pub mod dghv {
         fn public_key_element_sample(&self, secret: &Integer) -> Integer {
             let q_bound: Integer = ((Integer::from(1) << self.pk_width) / secret) + 1;
             let r_bound: Integer = Integer::from(1) << (self.noise_width as u32 + 1);
-            let q = q_bound.random_below(&mut new_rng_state());
+            let q = q_bound.random_below(&mut new_rand_state());
             let mut r: Integer = Integer::from(0);
             while r == 0 {
-              r = r_bound
-                .random_below_ref(&mut new_rng_state())
-                .complete()  
+                r = r_bound.random_below_ref(&mut new_rand_state()).complete()
             }
-            r -= r_bound >> 1; 
+            r -= r_bound >> 1;
 
             let x = (secret * q) + r;
             x
@@ -156,8 +167,8 @@ pub mod dghv {
                 });
                 pk.par_sort();
                 pk.reverse();
-                let remainder = pk[0].modulo_ref(secret).complete();
-                if pk[0].is_odd() && remainder.is_even() {
+                let remainder = pk[0].div_rem_round_ref(secret).complete().1;
+                if pk[0].find_one(0) == Some(0) && remainder.find_zero(0) == Some(0) {
                     break;
                 }
             }
@@ -191,19 +202,18 @@ pub mod dghv {
             let r_bound: Integer = Integer::from(1) << (self.big_noise_width as u32 + 1);
             let mut r: Integer = Integer::from(0);
             while r == 0 {
-                r = r_bound.random_below_ref(&mut new_rng_state()).complete()
+                r = r_bound.random_below_ref(&mut new_rand_state()).complete()
             }
-            r -= (r_bound >> 1);
-
-            let subset = self.pk[1..].iter().choose_multiple(&mut Randomizer::new(), subset_size as usize);
-
+            r -= r_bound >> 1;
+            let subset = self.pk[1..]
+                .iter()
+                .choose_multiple(&mut Randomizer::new(), subset_size as usize);
             let mut sum: Integer = subset.into_iter().sum();
             sum *= 2;
             r *= 2;
             sum += r;
             sum += val as u8;
-            sum.modulo_mut(&self.pk[0]);
-
+            let (_, sum) = sum.div_rem_round_ref(&self.pk[0]).complete(); // Change from modulo_mut
             sum
         }
     }
@@ -215,10 +225,8 @@ pub mod dghv {
 
     impl Decryptor {
         pub fn decrypt(&self, val: &Integer) -> bool {
-            let res = val
-                .modulo_ref(&self.sk)
-                .complete()
-                .modulo(&Integer::from(2));
+            let centered_remainder = val.div_rem_round_ref(&self.sk).complete().1;
+            let res = centered_remainder.modulo(&Integer::from(2));
             !res.is_zero()
         }
     }
@@ -226,7 +234,7 @@ pub mod dghv {
     #[cfg(test)]
     mod test {
 
-        use super::{Context, MAX_SECURITY};
+        use crate::dghv::*;
 
         #[test]
         fn context_auto_creation() {
@@ -236,6 +244,90 @@ pub mod dghv {
             for i in (MAX_SECURITY + 1..u8::MAX) {
                 assert!(Context::create(i).is_none());
             }
+        }
+
+        #[test]
+        fn max_multiplication_depth() {
+            // These values are based on the approximation D < log2(eta / (1 + rho'))
+            // and the predefined constants in the Context struct.
+            assert_eq!(DGHV_CTX_TINY.max_multiplication_depth(), 4);
+            assert_eq!(DGHV_CTX_SMALL.max_multiplication_depth(), 4);
+            assert_eq!(DGHV_CTX_MEDIUM.max_multiplication_depth(), 4);
+            assert_eq!(DGHV_CTX_LARGE.max_multiplication_depth(), 4);
+
+            // Test a context with potentially 0 depth (if possible to configure)
+            let very_noisy_ctx = Context {
+                big_noise_width: 1000, // Very large noise
+                noise_width: 100,
+                sk_width: 100, // Small secret key width
+                pk_width: 10000,
+                pk_count: 100,
+                security: 10,
+            };
+            // Noise is too large for any multiplication.
+            assert_eq!(very_noisy_ctx.max_multiplication_depth(), 0);
+
+            // Test a custom context that might yield a different depth
+            let custom_ctx = Context::create(40).unwrap(); // Lambda=40
+            assert_eq!(custom_ctx.max_multiplication_depth(), 4);
+        }
+
+        #[test]
+        fn encryption_decryption() {
+            let ctx = DGHV_CTX_SMALL; // Using a predefined small context for testing
+            let (enc, dec) = ctx.key_gen();
+
+            // Test encryption and decryption of 'true'
+            let ct_true = enc.encrypt(true);
+            let decrypted_true = dec.decrypt(&ct_true);
+            assert_eq!(decrypted_true, true, "Decryption of true failed!");
+
+            // Test encryption and decryption of 'false'
+            let ct_false = enc.encrypt(false);
+            let decrypted_false = dec.decrypt(&ct_false);
+            assert_eq!(decrypted_false, false, "Decryption of false failed!");
+        }
+
+        #[test]
+        fn homomorphic_addition() {
+            let ctx = DGHV_CTX_SMALL;
+            let (enc, dec) = ctx.key_gen();
+
+            // Encrypt true (1) and false (0)
+            let ct1 = enc.encrypt(true);  // 1
+            let ct2 = enc.encrypt(false); // 0
+
+            // Test 1 + 0 = 1
+            let sum_ct = &ct1 + ct2;
+            let decrypted_sum = dec.decrypt(&sum_ct);
+            assert_eq!(decrypted_sum, true, "Homomorphic addition 1+0 failed!");
+
+            // Test 1 + 1 = 0 (modulo 2)
+            let ct3 = enc.encrypt(true); // 1
+            let sum_ct2 = &ct1 + ct3;
+            let decrypted_sum2 = dec.decrypt(&sum_ct2);
+            assert_eq!(decrypted_sum2, false, "Homomorphic addition 1+1 failed!");
+        }
+
+        #[test]
+        fn homomorphic_multiplication() {
+            let ctx = DGHV_CTX_SMALL;
+            let (enc, dec) = ctx.key_gen();
+
+            // Encrypt true (1) and false (0)
+            let ct1 = enc.encrypt(true);  // 1
+            let ct2 = enc.encrypt(false); // 0
+            let ct3 = enc.encrypt(true);  // 1
+
+            // Test 1 * 0 = 0
+            let mult_ct1 = &ct1 * ct2;
+            let decrypted_mult1 = dec.decrypt(&mult_ct1);
+            assert_eq!(decrypted_mult1, false, "Homomorphic multiplication 1*0 failed!");
+
+            // Test 1 * 1 = 1
+            let mult_ct2 = &ct1 * ct3;
+            let decrypted_mult2 = dec.decrypt(&mult_ct2);
+            assert_eq!(decrypted_mult2, true, "Homomorphic multiplication 1*1 failed!");
         }
     }
 }

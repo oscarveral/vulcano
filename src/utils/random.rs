@@ -1,7 +1,7 @@
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use rug::rand::{RandGen, RandState};
 
-pub fn new_rng_state() -> RandState<'static> {
+pub fn new_rand_state() -> RandState<'static> {
         let random = Box::new(Randomizer::new());
         RandState::new_custom_boxed(random)
 }
