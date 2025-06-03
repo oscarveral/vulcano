@@ -1,9 +1,9 @@
-use rand::{rngs::StdRng, RngCore, SeedableRng};
+use rand::{RngCore, SeedableRng, rngs::StdRng};
 use rug::rand::{RandGen, RandState};
 
 pub fn new_rand_state() -> RandState<'static> {
-        let random = Box::new(Randomizer::new());
-        RandState::new_custom_boxed(random)
+    let random = Box::new(Randomizer::new());
+    RandState::new_custom_boxed(random)
 }
 
 pub struct Randomizer {
@@ -13,7 +13,7 @@ pub struct Randomizer {
 impl Randomizer {
     pub fn new() -> Randomizer {
         let rng = StdRng::from_os_rng();
-        Randomizer { rng: rng }
+        Randomizer { rng }
     }
 
     pub fn random_usize(&mut self) -> usize {
@@ -26,6 +26,12 @@ impl Randomizer {
 
     pub fn random_u64(&mut self) -> u64 {
         self.rng.next_u64()
+    }
+}
+
+impl Default for Randomizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
