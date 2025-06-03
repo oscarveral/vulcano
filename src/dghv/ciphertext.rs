@@ -44,8 +44,8 @@ impl From<Integer> for Ciphertext {
     }
 }
 
-impl Into<Integer> for Ciphertext {
-    fn into(self) -> Integer {
-        self.0
+impl From<Ciphertext> for Integer {
+    fn from(value: Ciphertext) -> Self {
+        value.0
     }
 }

@@ -197,4 +197,10 @@ impl Context {
             Decryptor::new(sk),
         )
     }
+
+    /// Ontain the security parameter $\lambda$ from the
+    /// calling [Context].
+    pub fn get_security(&self) -> u8 {
+        self.security
+    }
 }
