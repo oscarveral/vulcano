@@ -105,3 +105,10 @@ fn homomorphic_multiplication() {
         "Homomorphic multiplication 0*0 failed!"
     );
 }
+
+#[test]
+fn memory_footprint_test() {
+    // Get the size of a DGHV context.
+    let byte_size = DGHV_CTX_SMALL.get_size();
+    assert_eq!(byte_size, 0x14);
+}

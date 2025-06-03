@@ -25,4 +25,10 @@ impl Decryptor {
         let res = centered_remainder.modulo(&Integer::from(2));
         !res.is_zero()
     }
+
+    /// Get the memory footprint in bytes of the [Decryptor].
+    pub fn get_size(&self) -> usize {
+        let size = std::mem::size_of_val(self);
+        size + (self.sk.capacity() / (u8::BITS as usize))
+    }
 }

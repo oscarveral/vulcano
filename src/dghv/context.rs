@@ -203,4 +203,9 @@ impl Context {
     pub fn get_security(&self) -> u8 {
         self.security
     }
+
+    /// Get the memory footprint of a given [Context] in bytes.
+    pub fn get_size(&self) -> usize {
+        std::mem::size_of_val(self)
+    }
 }

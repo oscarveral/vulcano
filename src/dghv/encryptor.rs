@@ -48,4 +48,14 @@ impl Encryptor {
         let (_, sum) = sum.div_rem_round_ref(&self.pk[0]).complete(); // Change from modulo_mut
         Ciphertext::from(sum)
     }
+
+    /// Get the memory footprint in bytes of the [Encryptor].
+    pub fn get_size(&self) -> usize {
+        let mut size = std::mem::size_of_val(self);
+        for int in &self.pk {
+            size += int.capacity() / (u8::BITS as usize);
+            size += std::mem::size_of::<Integer>();
+        }
+        size
+    }
 }
