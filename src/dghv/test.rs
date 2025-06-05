@@ -1,6 +1,6 @@
 use crate::dghv::{
     Context,
-    context::{DGHV_CTX_LARGE, DGHV_CTX_MEDIUM, DGHV_CTX_SMALL, DGHV_CTX_TINY, MAX_SECURITY},
+    context::{DGHV_CTX_SMALL, MAX_SECURITY},
 };
 
 #[test]
@@ -15,17 +15,22 @@ fn context_auto_creation() {
 
 #[test]
 fn max_multiplication_depth() {
-    // Test default provided DGHV context depth.
-    assert_eq!(DGHV_CTX_TINY.max_multiplication_depth(), 4);
-    assert_eq!(DGHV_CTX_SMALL.max_multiplication_depth(), 4);
-    assert_eq!(DGHV_CTX_MEDIUM.max_multiplication_depth(), 4);
-    assert_eq!(DGHV_CTX_LARGE.max_multiplication_depth(), 4);
 
-    // Test a context with potentially 0 depth.
-    let very_noisy_ctx_build = Context::create_with_params(10, 100, 1000, 100, 10000, 100);
-    assert!(very_noisy_ctx_build.is_some());
-    let very_noisy_ctx = very_noisy_ctx_build.unwrap();
-    assert_eq!(very_noisy_ctx.max_multiplication_depth(), 0);
+    // Test for the toy context that the given depht is correct.
+    for _ in 0..20 {
+        let ctx = DGHV_CTX_SMALL;
+        let depth = ctx.max_multiplication_depth(0.0);
+        println!("{}", depth);
+        let (enc, dec) = ctx.key_gen();
+        let mut c1 = enc.encrypt(false);
+        let c2 = c1.clone();
+
+        for _ in 0..depth{
+            c1 = c1 * c2.clone();
+            let res = dec.decrypt(c1.clone());
+            assert!(res == false);
+        }
+    }
 }
 
 #[test]

@@ -119,26 +119,28 @@ impl Context {
         })
     }
 
-    /// Estimates the maximum multiplication depth supported by the context.
-    /// This is a heuristic based on the approximate noise growth in DGHV.
-    /// Noise roughly squares its bit-length with each multiplication.
-    /// The formula used is $d < \log_2(\eta / (1 + \rho\'))$.
-    pub fn max_multiplication_depth(&self) -> u32 {
-        let eta = self.sk_width as f64;
-        let big_rho_prime = self.big_noise_width as f64;
-        let numerator = eta;
-        let denominator = 1.0 + big_rho_prime;
-        let ratio = numerator / denominator;
-        // If ratio is 1 or less, $log_2(ratio)$ would be 0 or negative.
-        // This means even a fresh ciphertext's noise might be too large,
-        // or no multiplications are supported.
-        if ratio <= 1.0 {
+    /// Calculate an upper bound on the multiplicative depth 
+    /// available for the given context parameters. Circuit depth is 
+    /// estimated via $d \leq \frac{\eta - 4 - \log{|f|}}{\rho\'+2}$.
+    /// As $d$ must be smaller than the right term, one is subtracted 
+    /// from the result to avoid going to close to the limit.
+    /// 
+    /// log_f_norm parameter corresponds with $\log{|f|}$ with $|f|$ the $l_1$
+    /// norm of the coefficient vector of $f$, being $f$ the polynomial computed
+    /// equivalen to the specific circuit being evaluated. Boolean multiplications
+    /// translate into $f(m_1,m_2) = m_1m_2 \rightarrow |f| = \sum\{|1|\}$ on integer algebra
+    /// and boolean aditions into $f(m_1,m_2)=m_1+m_2-2m_1m_2 \rightarrow |f| = \sum\{|1|,|1|,|-2|\}$.
+    pub fn max_multiplication_depth(&self, log_f_norm: f64) -> u32 {
+        let numerator_f64 = self.sk_width as f64 - 4.0 - log_f_norm;
+        if numerator_f64 <= 0.0 {
             return 0;
         }
-        let log2_ratio = ratio.log2();
-        // The maximum depth is the floor of this value
-        // (since $d$ must be an integer and $d < value$)
-        log2_ratio.floor() as u32
+        let denominator_f64 = self.big_noise_width as f64 + 2.0;
+        if denominator_f64 == 0.0 {
+            return 0; 
+        }
+        // Return one below to make sure the depth is valid.
+        ((numerator_f64 / denominator_f64).floor() - 1.0).max(0.0) as u32
     }
 
     /// Generate a secret key $p$ from the DGHV context.
