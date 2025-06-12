@@ -1,1 +1,6 @@
+# Build artifacts.
 /target
+
+# IDE directories.
+.idea/
+.vscode/

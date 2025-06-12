@@ -114,9 +114,9 @@ impl Evaluator {
 
     /// Get the memory footprint of the [Evaluator].
     pub fn get_size(&self) -> usize {
-        let mut size = std::mem::size_of_val(self);
+        let mut size = size_of_val(self);
         for i in &self.rsk {
-            size += std::mem::size_of::<Integer>();
+            size += size_of::<Integer>();
             size += i.capacity() / (u8::BITS as usize);
         }
         size

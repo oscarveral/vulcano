@@ -28,7 +28,7 @@ impl Encryptor {
         }
     }
 
-    /// Cipher a boolean value to obtain a fresh [Ciphertext].
+    /// Cipher a boolean value to get a fresh [Ciphertext].
     pub fn encrypt(&self, val: bool) -> Ciphertext {
         let subset_size = Randomizer::new().next_u32() % self.pk_count;
         let r_bound: Integer = Integer::from(1) << (self.big_noise_width as u32 + 1);
@@ -51,10 +51,10 @@ impl Encryptor {
 
     /// Get the memory footprint in bytes of the [Encryptor].
     pub fn get_size(&self) -> usize {
-        let mut size = std::mem::size_of_val(self);
+        let mut size = size_of_val(self);
         for int in &self.pk {
             size += int.capacity() / (u8::BITS as usize);
-            size += std::mem::size_of::<Integer>();
+            size += size_of::<Integer>();
         }
         size
     }

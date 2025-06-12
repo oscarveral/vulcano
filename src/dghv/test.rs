@@ -2,7 +2,7 @@ use crate::dghv::context::DGHV_CTX_TINY;
 
 #[test]
 fn encryption_decryption() {
-    // Use a small sized context for testing.
+    // Use a small-sized context for testing.
     let ctx = DGHV_CTX_TINY;
     let (enc, dec, _) = ctx.key_gen();
 
@@ -19,7 +19,7 @@ fn encryption_decryption() {
 
 #[test]
 fn homomorphic_addition() {
-    // Use a small sized context for testing.
+    // Use a small-sized context for testing.
     let ctx = DGHV_CTX_TINY;
     let (enc, dec, eval) = ctx.key_gen();
 
@@ -45,7 +45,7 @@ fn homomorphic_addition() {
 
 #[test]
 fn homomorphic_multiplication() {
-    // Use a small sized context for testing.
+    // Use a small-sized context for testing.
     let ctx = DGHV_CTX_TINY;
     let (enc, dec, eval) = ctx.key_gen();
 
@@ -80,13 +80,13 @@ fn homomorphic_multiplication() {
 
 #[test]
 fn scale_down() {
-    // Use a small sized context for testing.
+    // Use a small-sized context for testing.
     let ctx = DGHV_CTX_TINY;
     let (enc, _, eval) = ctx.key_gen();
     // Encrypt sample values.
     let mut ct1 = enc.encrypt(true);
     let ct2 = enc.encrypt(true);
-    // Grow a big ciphertext an scale down as needed.
+    // Grow a big ciphertext a scale down as needed.
     let mut size = ct1.get_size();
     for _ in 0..40 {
         eval.mult_inplace_ref(&mut ct1, &ct2);
@@ -96,14 +96,14 @@ fn scale_down() {
         };
         eval.scale_down(&mut ct1);
     }
-    // See if max reached size is bigger than scaled down one.
+    // See if max reached size is bigger than the scaled down one.
     let size_after = ct1.get_size();
     assert!(size_after <= size);
 }
 
 #[test]
 fn max_multiplication_depth() {
-    // Test for the toy context that the given depht is correct.
+    // Test for the toy context that the given depth is correct.
     for _ in 0..5 {
         let ctx = DGHV_CTX_TINY;
         let depth = ctx.max_multiplication_depth(0.0);
@@ -114,7 +114,7 @@ fn max_multiplication_depth() {
         for _ in 0..depth {
             eval.mult_inplace_ref(&mut c1, &c2);
             let res = dec.decrypt(c1.clone());
-            assert!(res == false, "Expected a false value on the assertion!");
+            assert_eq!(res, false, "Expected a false value on the assertion!");
         }
     }
 }

@@ -4,7 +4,7 @@ use rug::Integer;
 /// Store private data.
 #[derive(Clone, Debug)]
 pub struct Ciphertext(
-    /// Internally a ciphertext is only an integer.
+    /// Internally, a ciphertext is only an integer.
     Integer,
 );
 

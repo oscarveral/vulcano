@@ -28,7 +28,7 @@ impl Decryptor {
 
     /// Get the memory footprint in bytes of the [Decryptor].
     pub fn get_size(&self) -> usize {
-        let size = std::mem::size_of_val(self);
+        let size = size_of_val(self);
         size + (self.sk.capacity() / (u8::BITS as usize))
     }
 }

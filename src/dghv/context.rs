@@ -68,7 +68,7 @@ pub const DGHV_CTX_LARGE: Context = Context {
 
 impl Context {
     /// Create a DGHV context specifying all the parameters.
-    /// Be carefull with the parameters used as it may result in an insecure scheme.
+    /// Be careful with the parameters used as it may result in an insecure scheme.
     pub fn create_with_params(
         lambda: u8,
         rho: u16,
@@ -91,11 +91,11 @@ impl Context {
     /// available for the given context parameters. Circuit depth is
     /// estimated via $d \leq \frac{\eta - 4 - \log{|f|}}{\rho\'+2}$.
     /// As $d$ must be smaller than the right term, one is subtracted
-    /// from the result to avoid going to close to the limit.
+    /// from the result to avoid going too close to the limit.
     ///
-    /// log_f_norm parameter corresponds with $\log{|f|}$ with $|f|$ the $l_1$
+    /// The log_f_norm parameter corresponds with $\log{|f|}$ with $|f|$ the $l_1$
     /// norm of the coefficient vector of $f$, being $f$ the polynomial computed
-    /// equivalen to the specific circuit being evaluated. Boolean multiplications
+    /// equivalent to the specific circuit being evaluated. Boolean multiplications
     /// translate into $f(m_1,m_2) = m_1m_2 \rightarrow |f| = \sum\{|1|\}$ on integer algebra
     /// and boolean aditions into $f(m_1,m_2)=m_1+m_2-2m_1m_2 \rightarrow |f| = \sum\{|1|,|1|,|-2|\}$.
     pub fn max_multiplication_depth(&self, log_f_norm: f64) -> u32 {
@@ -107,14 +107,14 @@ impl Context {
         if denominator_f64 == 0.0 {
             return 0;
         }
-        // Return one below to make sure the depth is valid.
+        // Return the one below to make sure the depth is valid.
         ((numerator_f64 / denominator_f64).floor() - 1.0).max(0.0) as u32
     }
 
     /// Generate a secret key $p$ from the DGHV context.
-    /// This function takes a sample $p\leftarrow(2\mathbb{Z}+1)\cap[2^{\eta-1}, 2^\eta).
+    /// This function takes a sample $p\leftarrow(2\mathbb{Z}+1)\cap[2^{\eta-1}, 2^\eta)$.
     fn secret_key_sample(&self) -> Integer {
-        let sk_bound: Integer = Integer::from(1) << (self.sk_width - 1);
+        let sk_bound: Integer = Integer::from(1) << (self.sk_width.checked_sub(1).unwrap());
         let p: Integer =
             (sk_bound.random_below_ref(&mut new_rand_state()).complete() + sk_bound) | 0x1;
         p
@@ -142,7 +142,10 @@ impl Context {
     /// that $pk_0$ is the largest one, $pk_0$ is odd, and $pk_0\;\text{mod}\;p$ is even.
     fn public_key_sample(&self, secret: &Integer) -> Vec<Integer> {
         let mut pk: Vec<Integer> = Vec::new();
-        pk.resize(self.pk_count as usize + 1, Integer::new());
+        pk.resize(
+            (self.pk_count as usize).checked_add(1).unwrap(),
+            Integer::new(),
+        );
         loop {
             pk.par_iter_mut().for_each(|x| {
                 *x = self.public_key_element_sample(secret);
@@ -207,7 +210,7 @@ impl Context {
         )
     }
 
-    /// Ontain the security parameter $\lambda$ from the
+    /// Get the security parameter $\lambda$ from the
     /// calling [Context].
     pub fn get_security(&self) -> u8 {
         self.security
@@ -215,6 +218,6 @@ impl Context {
 
     /// Get the memory footprint of a given [Context] in bytes.
     pub fn get_size(&self) -> usize {
-        std::mem::size_of_val(self)
+        size_of_val(self)
     }
 }
