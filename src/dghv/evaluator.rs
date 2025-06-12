@@ -2,19 +2,19 @@ use rug::{Complete, Integer};
 
 use crate::dghv::Ciphertext;
 
-/// An [Evaluator] that enables the operation on DGHV [Ciphertext].
-#[derive(Clone, Debug)]
+/// DGHV [Evaluator]. Enables doing operations on [Ciphertext].
+#[derive(Debug)]
 pub struct Evaluator {
     /// Vector of keys to be able to perform the downscale operation.
     rsk: Vec<Integer>,
     /// $\gamma$ parameter. Bit-length of the integers in the public key. Constraint: $\omega(\eta^2\log\lambda)$.
-    pk_width: u32,
+    gamma: u32,
 }
 
 impl Evaluator {
     /// Create a new [Evaluator] using the given scale-down keys and $\gamma$ parameter.
-    pub fn new(rsk: Vec<Integer>, pk_width: u32) -> Self {
-        Evaluator { rsk, pk_width }
+    pub fn new(rsk: Vec<Integer>, gamma: u32) -> Self {
+        Evaluator { rsk, gamma }
     }
 
     /// Addition of two [Ciphertext].
@@ -103,10 +103,10 @@ impl Evaluator {
 
     /// Scale down a given [Ciphertext] to reduce its size.
     pub fn scale_down(&self, a: &mut Ciphertext) {
-        let bound: Integer = Integer::from(1) << self.pk_width;
+        let bound: Integer = Integer::from(1) << self.gamma;
         let raw_a: &mut Integer = a.into();
         if *raw_a > bound {
-            for i in (0..=self.pk_width as usize).rev() {
+            for i in (0..=self.gamma as usize).rev() {
                 *raw_a = (*raw_a).div_rem_round_ref(&self.rsk[i]).complete().1;
             }
         }

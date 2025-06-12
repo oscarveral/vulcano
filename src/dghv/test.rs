@@ -1,9 +1,9 @@
-use crate::dghv::context::DGHV_CTX_TINY;
+use crate::dghv::context::CONTEXT_TINY;
 
 #[test]
 fn encryption_decryption() {
     // Use a small-sized context for testing.
-    let ctx = DGHV_CTX_TINY;
+    let ctx = CONTEXT_TINY;
     let (enc, dec, _) = ctx.key_gen();
 
     // Test encryption and decryption of 'true'.
@@ -20,7 +20,7 @@ fn encryption_decryption() {
 #[test]
 fn homomorphic_addition() {
     // Use a small-sized context for testing.
-    let ctx = DGHV_CTX_TINY;
+    let ctx = CONTEXT_TINY;
     let (enc, dec, eval) = ctx.key_gen();
 
     // Encrypt true (1) and false (0).
@@ -46,7 +46,7 @@ fn homomorphic_addition() {
 #[test]
 fn homomorphic_multiplication() {
     // Use a small-sized context for testing.
-    let ctx = DGHV_CTX_TINY;
+    let ctx = CONTEXT_TINY;
     let (enc, dec, eval) = ctx.key_gen();
 
     // Encrypt true (1) and false (0).
@@ -81,7 +81,7 @@ fn homomorphic_multiplication() {
 #[test]
 fn scale_down() {
     // Use a small-sized context for testing.
-    let ctx = DGHV_CTX_TINY;
+    let ctx = CONTEXT_TINY;
     let (enc, _, eval) = ctx.key_gen();
     // Encrypt sample values.
     let mut ct1 = enc.encrypt(true);
@@ -105,7 +105,7 @@ fn scale_down() {
 fn max_multiplication_depth() {
     // Test for the toy context that the given depth is correct.
     for _ in 0..5 {
-        let ctx = DGHV_CTX_TINY;
+        let ctx = CONTEXT_TINY;
         let depth = ctx.max_multiplication_depth(0.0);
         let (enc, dec, eval) = ctx.key_gen();
         let mut c1 = enc.encrypt(false);

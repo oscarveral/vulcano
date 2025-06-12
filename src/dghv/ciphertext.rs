@@ -33,7 +33,7 @@ impl<'a> From<&'a mut Ciphertext> for &'a mut Integer {
 }
 
 impl Ciphertext {
-    /// Obtain the memory footprint of the [Ciphertext].
+    /// Get the memory footprint of the [Ciphertext].
     pub fn get_size(&self) -> usize {
         let size = std::mem::size_of_val(self);
         size + (self.0.capacity() / (u8::BITS as usize))

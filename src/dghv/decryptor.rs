@@ -3,7 +3,7 @@ use rug::{Complete, Integer};
 use crate::dghv::Ciphertext;
 
 /// DGHV [Decryptor].
-/// Allows the decryption of boolean values stored in ciphertext data.
+/// Allows the decryption of boolean values stored in [Ciphertext] data.
 #[derive(Debug)]
 pub struct Decryptor {
     /// Secret key $sk$. Allows decryption of [Ciphertext]
