@@ -1,8 +1,8 @@
 use crate::{
     dghv::Ciphertext,
-    utils::random::{Randomizer, new_rand_state},
+    dghv::random::{Randomizer, new_rand_state},
 };
-use rand::seq::IteratorRandom;
+use rand::{RngCore, seq::IteratorRandom};
 use rug::{Complete, Integer};
 
 /// DGHV [Encryptor].
@@ -30,7 +30,7 @@ impl Encryptor {
 
     /// Cipher a boolean value to obtain a fresh [Ciphertext].
     pub fn encrypt(&self, val: bool) -> Ciphertext {
-        let subset_size = Randomizer::new().random_u32() % self.pk_count;
+        let subset_size = Randomizer::new().next_u32() % self.pk_count;
         let r_bound: Integer = Integer::from(1) << (self.big_noise_width as u32 + 1);
         let mut r: Integer = Integer::from(0);
         while r == 0 {

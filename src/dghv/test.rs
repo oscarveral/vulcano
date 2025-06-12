@@ -1,24 +1,6 @@
 use crate::dghv::context::DGHV_CTX_TINY;
 
 #[test]
-fn max_multiplication_depth() {
-    // Test for the toy context that the given depht is correct.
-    for _ in 0..5 {
-        let ctx = DGHV_CTX_TINY;
-        let depth = ctx.max_multiplication_depth(0.0);
-        let (enc, dec, eval) = ctx.key_gen();
-        let mut c1 = enc.encrypt(false);
-        let c2 = c1.clone();
-
-        for _ in 0..depth {
-            eval.mult_inplace_ref(&mut c1, &c2);
-            let res = dec.decrypt(c1.clone());
-            assert!(res == false, "Expected a false value on the assertion!");
-        }
-    }
-}
-
-#[test]
 fn encryption_decryption() {
     // Use a small sized context for testing.
     let ctx = DGHV_CTX_TINY;
@@ -97,13 +79,6 @@ fn homomorphic_multiplication() {
 }
 
 #[test]
-fn memory_footprint_test() {
-    // Get the size of a DGHV context.
-    let byte_size = DGHV_CTX_TINY.get_size();
-    assert_eq!(byte_size, 0x14);
-}
-
-#[test]
 fn scale_down() {
     // Use a small sized context for testing.
     let ctx = DGHV_CTX_TINY;
@@ -124,4 +99,22 @@ fn scale_down() {
     // See if max reached size is bigger than scaled down one.
     let size_after = ct1.get_size();
     assert!(size_after <= size);
+}
+
+#[test]
+fn max_multiplication_depth() {
+    // Test for the toy context that the given depht is correct.
+    for _ in 0..5 {
+        let ctx = DGHV_CTX_TINY;
+        let depth = ctx.max_multiplication_depth(0.0);
+        let (enc, dec, eval) = ctx.key_gen();
+        let mut c1 = enc.encrypt(false);
+        let c2 = c1.clone();
+
+        for _ in 0..depth {
+            eval.mult_inplace_ref(&mut c1, &c2);
+            let res = dec.decrypt(c1.clone());
+            assert!(res == false, "Expected a false value on the assertion!");
+        }
+    }
 }

@@ -3,6 +3,7 @@ mod context;
 mod decryptor;
 mod encryptor;
 mod evaluator;
+mod random;
 
 pub use ciphertext::Ciphertext;
 pub use context::Context;

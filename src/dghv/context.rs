@@ -1,6 +1,6 @@
 use crate::{
+    dghv::random::new_rand_state,
     dghv::{Decryptor, Encryptor, Evaluator},
-    utils::random::new_rand_state,
 };
 use rayon::{
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
