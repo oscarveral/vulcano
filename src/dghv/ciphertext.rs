@@ -1,5 +1,3 @@
-use std::ops::{Add, AddAssign, Mul, MulAssign};
-
 use rug::Integer;
 
 /// DGHV [Ciphertext].
@@ -10,34 +8,6 @@ pub struct Ciphertext(
     Integer,
 );
 
-impl Add for Ciphertext {
-    type Output = Ciphertext;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Ciphertext(self.0.add(rhs.0))
-    }
-}
-
-impl AddAssign for Ciphertext {
-    fn add_assign(&mut self, rhs: Self) {
-        self.0.add_assign(rhs.0);
-    }
-}
-
-impl Mul for Ciphertext {
-    type Output = Ciphertext;
-
-    fn mul(self, rhs: Self) -> Self::Output {
-        Ciphertext(self.0.mul(rhs.0))
-    }
-}
-
-impl MulAssign for Ciphertext {
-    fn mul_assign(&mut self, rhs: Self) {
-        self.0.mul_assign(rhs.0);
-    }
-}
-
 impl From<Integer> for Ciphertext {
     fn from(value: Integer) -> Self {
         Ciphertext(value)
@@ -47,6 +17,18 @@ impl From<Integer> for Ciphertext {
 impl From<Ciphertext> for Integer {
     fn from(value: Ciphertext) -> Self {
         value.0
+    }
+}
+
+impl<'a> From<&'a Ciphertext> for &'a Integer {
+    fn from(value: &'a Ciphertext) -> Self {
+        &value.0
+    }
+}
+
+impl<'a> From<&'a mut Ciphertext> for &'a mut Integer {
+    fn from(value: &'a mut Ciphertext) -> Self {
+        &mut value.0
     }
 }
 

@@ -1,15 +1,12 @@
 use crate::{
-    dghv::{Decryptor, Encryptor},
+    dghv::{Decryptor, Encryptor, Evaluator},
     utils::random::new_rand_state,
 };
 use rayon::{
-    iter::{IntoParallelRefMutIterator, ParallelIterator},
+    iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
-use rug::{Complete, Integer};
-
-/// Maximum implementation allowed value for $\lambda$ security parameter.
-pub const MAX_SECURITY: u8 = 84;
+use rug::{Complete, Integer, ops::DivRounding};
 
 /// DGHV Scheme [Context].
 /// Store all the parameters used by the scheme.
@@ -70,31 +67,6 @@ pub const DGHV_CTX_LARGE: Context = Context {
 };
 
 impl Context {
-    /// Create a DGHV context using deriving all parameters.
-    /// Takes as input the desired security level used to derive the rest.
-    pub fn create_with_derivation(security: u8) -> Option<Context> {
-        // Bigger security values may produce param values bigger than 32-bit max value.
-        if security > MAX_SECURITY {
-            return None;
-        }
-
-        let lambda: u8 = security;
-        let rho: u16 = lambda as u16;
-        let big_rho: u16 = 2 * (lambda as u16);
-        let eta: u32 = (lambda as u32) * (lambda as u32) + (lambda as u32);
-        let gamma: u32 = (lambda as u32) * eta * eta;
-        let tau: u32 = (lambda as u32) + gamma;
-
-        Some(Context {
-            security: lambda,
-            sk_width: eta,
-            pk_width: gamma,
-            pk_count: tau,
-            noise_width: rho,
-            big_noise_width: big_rho,
-        })
-    }
-
     /// Create a DGHV context specifying all the parameters.
     /// Be carefull with the parameters used as it may result in an insecure scheme.
     pub fn create_with_params(
@@ -105,10 +77,6 @@ impl Context {
         gamma: u32,
         tau: u32,
     ) -> Option<Context> {
-        if lambda > MAX_SECURITY {
-            return None;
-        }
-
         Some(Context {
             big_noise_width: big_rho,
             noise_width: rho,
@@ -119,12 +87,12 @@ impl Context {
         })
     }
 
-    /// Calculate an upper bound on the multiplicative depth 
-    /// available for the given context parameters. Circuit depth is 
+    /// Calculate an upper bound on the multiplicative depth
+    /// available for the given context parameters. Circuit depth is
     /// estimated via $d \leq \frac{\eta - 4 - \log{|f|}}{\rho\'+2}$.
-    /// As $d$ must be smaller than the right term, one is subtracted 
+    /// As $d$ must be smaller than the right term, one is subtracted
     /// from the result to avoid going to close to the limit.
-    /// 
+    ///
     /// log_f_norm parameter corresponds with $\log{|f|}$ with $|f|$ the $l_1$
     /// norm of the coefficient vector of $f$, being $f$ the polynomial computed
     /// equivalen to the specific circuit being evaluated. Boolean multiplications
@@ -137,7 +105,7 @@ impl Context {
         }
         let denominator_f64 = self.big_noise_width as f64 + 2.0;
         if denominator_f64 == 0.0 {
-            return 0; 
+            return 0;
         }
         // Return one below to make sure the depth is valid.
         ((numerator_f64 / denominator_f64).floor() - 1.0).max(0.0) as u32
@@ -156,7 +124,7 @@ impl Context {
     /// Given a secret key $p$ and parameters $\gamma$ and $\rho$. Sample $x=pq+r$
     /// with $q \leftarrow \mathbb{Z}\cap[0, 2^\gamma/p)$ and $r\leftarrow\mathbb{Z}\cap(-2^\rho, 2^\rho)$.
     fn public_key_element_sample(&self, secret: &Integer) -> Integer {
-        let q_bound: Integer = ((Integer::from(1) << self.pk_width) / secret) + 1;
+        let q_bound: Integer = (Integer::from(1) << self.pk_width).div_ceil(secret);
         let r_bound: Integer = Integer::from(1) << (self.noise_width as u32 + 1);
         let q = q_bound.random_below(&mut new_rand_state());
         let mut r: Integer = Integer::from(0);
@@ -189,14 +157,53 @@ impl Context {
         pk
     }
 
-    /// Generate a pair of with an [Encryptor] and [Decryptor] based on
+    /// Sample a [crate::dghv::Ciphertext] rescaling public key element using the given secret $p$ and index $i$.
+    /// Each rescaling element is $x_i\'\leftarrow 2(q_i\'\cdot p + r_i\')$ with
+    /// $q_i\'\leftarrow \mathbb{Z}\cap [2^{\gamma+i-1}/p,2^{\gamma+i}/p]$ and $r_i\'=
+    /// \mathbb{Z}\cap (-2^\rho, 2^\rho)$.
+    fn rescale_key_element_sample(&self, secret: &Integer, index: u32) -> Integer {
+        let r_bound = Integer::from(1) << (self.noise_width as u32 + 1);
+        let mut r = Integer::from(0);
+        while r == 0 {
+            r = r_bound.random_below_ref(&mut new_rand_state()).complete()
+        }
+        r -= r_bound >> 1;
+        let shift = self
+            .pk_width
+            .checked_add(index)
+            .unwrap()
+            .checked_sub(1)
+            .unwrap();
+        let q_bound: Integer = (Integer::from(1) << shift).div_ceil(secret);
+        let q = q_bound.random_below_ref(&mut new_rand_state()).complete() + q_bound;
+        2 * (q * secret + r)
+    }
+
+    /// Create a rescaling key using the given secret. A rescaling key is a vector of
+    /// $\gamma + 1$ increasingly bigger integers used to reduce [crate::dghv::Ciphertext] size.
+    fn rescale_key_sample(&self, secret: &Integer) -> Vec<Integer> {
+        let mut rescale_pk: Vec<Integer> = Vec::new();
+        rescale_pk.resize(
+            self.pk_width.checked_add(1).unwrap() as usize,
+            Integer::new(),
+        );
+        rescale_pk
+            .par_iter_mut()
+            .zip((0..=self.pk_width).collect::<Vec<_>>())
+            .for_each(|x| *x.0 = self.rescale_key_element_sample(secret, x.1));
+        rescale_pk
+    }
+
+    /// Generate a tuple with an [Encryptor], [Decryptor] and [Evaluator] based on
     /// the parameters of the calling [Context].
-    pub fn key_gen(&self) -> (Encryptor, Decryptor) {
+    pub fn key_gen(&self) -> (Encryptor, Decryptor, Evaluator) {
         let sk = self.secret_key_sample();
         let pk = self.public_key_sample(&sk);
+        let rsk = self.rescale_key_sample(&sk);
         (
             Encryptor::new(pk, self.big_noise_width, self.pk_count),
             Decryptor::new(sk),
+            Evaluator::new(rsk, self.pk_width),
         )
     }
 
