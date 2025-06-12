@@ -18,7 +18,7 @@ fn encryption_decryption() {
 }
 
 #[test]
-fn homomorphic_addition() {
+fn addition() {
     // Use a small-sized context for testing.
     let ctx = CONTEXT_TINY;
     let (enc, dec, eval) = ctx.key_gen();
@@ -44,7 +44,7 @@ fn homomorphic_addition() {
 }
 
 #[test]
-fn homomorphic_multiplication() {
+fn multiplication() {
     // Use a small-sized context for testing.
     let ctx = CONTEXT_TINY;
     let (enc, dec, eval) = ctx.key_gen();
@@ -79,26 +79,24 @@ fn homomorphic_multiplication() {
 }
 
 #[test]
-fn scale_down() {
+fn rescale() {
     // Use a small-sized context for testing.
-    let ctx = CONTEXT_TINY;
-    let (enc, _, eval) = ctx.key_gen();
-    // Encrypt sample values.
-    let mut ct1 = enc.encrypt(true);
-    let ct2 = enc.encrypt(true);
-    // Grow a big ciphertext a scale down as needed.
-    let mut size = ct1.get_size();
-    for _ in 0..40 {
-        eval.mult_inplace_ref(&mut ct1, &ct2);
-        size = match size < ct1.get_size() {
-            true => ct1.get_size(),
-            false => size,
-        };
-        eval.scale_down(&mut ct1);
+    for _ in 0..5 {
+        let ctx = CONTEXT_TINY;
+        let depth = ctx.max_multiplication_depth(0.0);
+        let (enc, dec, eval) = ctx.key_gen();
+        let mut c1 = enc.encrypt(true);
+        let c2 = c1.clone();
+
+        for _ in 0..depth {
+            eval.mult_inplace_ref(&mut c1, &c2);
+            let size = c1.get_size();
+            eval.rescale_inplace(&mut c1);
+            assert!(c1.get_size() <= size, "Rescaling failed!");
+            let res = dec.decrypt(c1.clone());
+            assert_eq!(res, true, "Expected a false value on the assertion!");
+        }
     }
-    // See if max reached size is bigger than the scaled down one.
-    let size_after = ct1.get_size();
-    assert!(size_after <= size);
 }
 
 #[test]

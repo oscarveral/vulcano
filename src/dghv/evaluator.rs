@@ -102,14 +102,67 @@ impl Evaluator {
     }
 
     /// Scale down a given [Ciphertext] to reduce its size.
-    pub fn scale_down(&self, a: &mut Ciphertext) {
-        let bound: Integer = Integer::from(1) << self.gamma;
+    pub fn rescale(&self, mut a: Ciphertext) -> Ciphertext {
+        self.rescale_inplace(&mut a);
+        a
+    }
+
+    /// Scale down a given [Ciphertext] to reduce its size.
+    pub fn rescale_ref(&self, a: &Ciphertext) -> Ciphertext {
+        let mut copy = a.clone();
+        self.rescale_inplace(&mut copy);
+        copy
+    }
+
+    /// Scale down a given [Ciphertext] inplace to reduce its size.
+    pub fn rescale_inplace(&self, a: &mut Ciphertext) {
+        let bound = Integer::from(1) << self.gamma;
         let raw_a: &mut Integer = a.into();
-        if *raw_a > bound {
-            for i in (0..=self.gamma as usize).rev() {
+        if raw_a.abs_ref().complete() > bound {
+            for i in 0..=self.gamma as usize {
                 *raw_a = (*raw_a).div_rem_round_ref(&self.rsk[i]).complete().1;
             }
         }
+    }
+
+    /// Multiplication of two [Ciphertext] and rescale down the result.
+    pub fn mult_and_rescale(&self, a: Ciphertext, b: Ciphertext) -> Ciphertext {
+        let mut res = self.mult(a, b);
+        self.rescale_inplace(&mut res);
+        res
+    }
+
+    /// Multiplication of two [Ciphertext] and rescale down the result.
+    pub fn mult_and_rescale_ref_right(&self, a: Ciphertext, b: &Ciphertext) -> Ciphertext {
+        let mut res = self.mult_ref_right(a, b);
+        self.rescale_inplace(&mut res);
+        res
+    }
+
+    /// Multiplication of two [Ciphertext] and rescale down the result.
+    pub fn mult_and_rescale_ref_left(&self, a: &Ciphertext, b: Ciphertext) -> Ciphertext {
+        let mut res = self.mult_ref_left(a, b);
+        self.rescale_inplace(&mut res);
+        res
+    }
+
+    /// Multiplication of two [Ciphertext] and rescale down the result.
+    pub fn mult_and_rescale_ref_both(&self, a: &Ciphertext, b: &Ciphertext) -> Ciphertext {
+        let mut res = self.mult_ref_both(a, b);
+        self.rescale_inplace(&mut res);
+        res
+    }
+
+    /// Multiplication of two [Ciphertext] and rescale down the result inplace.
+    pub fn mult_and_rescale_inplace(&self, a: &mut Ciphertext, b: Ciphertext) {
+        self.mult_inplace(a, b);
+        self.rescale_inplace(a);
+    }
+
+    /// Multiplication of two [Ciphertext] and rescale down the result inplace.
+    pub fn mult_and_rescale_inplace_ref(&self, a: &mut Ciphertext, b: &Ciphertext) {
+        self.mult_inplace_ref(a, b);
+        self.rescale_inplace(a);
     }
 
     /// Get the memory footprint of the [Evaluator].

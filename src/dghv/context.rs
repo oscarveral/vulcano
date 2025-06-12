@@ -180,7 +180,7 @@ impl Context {
     }
 
     /// Create a rescaling key using the given secret. A rescaling key is a vector of
-    /// $\gamma + 1$ increasingly bigger integers used to reduce [crate::dghv::Ciphertext] size.
+    /// $\gamma + 1$ decreasingly bigger integers used to reduce [crate::dghv::Ciphertext] size.
     fn rescale_key_sample(&self, secret: &Integer) -> Vec<Integer> {
         let mut rescale_pk: Vec<Integer> = Vec::new();
         rescale_pk.resize(self.gamma.checked_add(1).unwrap() as usize, Integer::new());
@@ -188,6 +188,7 @@ impl Context {
             .par_iter_mut()
             .zip((0..=self.gamma).collect::<Vec<_>>())
             .for_each(|x| *x.0 = self.rescale_key_element_sample(secret, x.1));
+        rescale_pk.reverse();
         rescale_pk
     }
 
