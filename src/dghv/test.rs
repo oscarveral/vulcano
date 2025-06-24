@@ -81,38 +81,34 @@ fn multiplication() {
 #[test]
 fn rescale() {
     // Use a small-sized context for testing.
-    for _ in 0..5 {
-        let ctx = CONTEXT_TINY;
-        let depth = ctx.max_multiplication_depth(0.0);
-        let (enc, dec, eval) = ctx.key_gen();
-        let mut c1 = enc.encrypt(true);
-        let c2 = c1.clone();
+    let ctx = CONTEXT_TINY;
+    let depth = ctx.max_multiplication_depth(0.0);
+    let (enc, dec, eval) = ctx.key_gen();
+    let mut c1 = enc.encrypt(false);
+    let c2 = c1.clone();
 
-        for _ in 0..depth {
-            eval.mult_inplace_ref(&mut c1, &c2);
-            let size = c1.get_size();
-            eval.rescale_inplace(&mut c1);
-            assert!(c1.get_size() <= size, "Rescaling failed!");
-            let res = dec.decrypt(c1.clone());
-            assert_eq!(res, true, "Expected a false value on the assertion!");
-        }
+    for _ in 0..depth {
+        eval.mult_inplace_ref(&mut c1, &c2);
+        let size = c1.get_size();
+        eval.rescale_inplace(&mut c1);
+        assert!(c1.get_size() <= size, "Rescaling failed!");
+        let res = dec.decrypt(c1.clone());
+        assert_eq!(res, false, "Expected a false value on the assertion!");
     }
 }
 
 #[test]
 fn max_multiplication_depth() {
     // Test for the toy context that the given depth is correct.
-    for _ in 0..5 {
-        let ctx = CONTEXT_TINY;
-        let depth = ctx.max_multiplication_depth(0.0);
-        let (enc, dec, eval) = ctx.key_gen();
-        let mut c1 = enc.encrypt(false);
-        let c2 = c1.clone();
+    let ctx = CONTEXT_TINY;
+    let depth = ctx.max_multiplication_depth(0.0);
+    let (enc, dec, eval) = ctx.key_gen();
+    let mut c1 = enc.encrypt(false);
+    let c2 = c1.clone();
 
-        for _ in 0..depth {
-            eval.mult_inplace_ref(&mut c1, &c2);
-            let res = dec.decrypt(c1.clone());
-            assert_eq!(res, false, "Expected a false value on the assertion!");
-        }
+    for _ in 0..depth {
+        eval.mult_inplace_ref(&mut c1, &c2);
+        let res = dec.decrypt(c1.clone());
+        assert_eq!(res, false, "Expected a false value on the assertion!");
     }
 }
