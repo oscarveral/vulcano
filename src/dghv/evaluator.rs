@@ -5,16 +5,14 @@ use crate::dghv::Ciphertext;
 /// DGHV [Evaluator]. Enables doing operations on [Ciphertext].
 #[derive(Debug)]
 pub struct Evaluator {
-    /// Vector of keys to be able to perform the downscale operation.
-    rsk: Vec<Integer>,
-    /// $\gamma$ parameter. Bit-length of the integers in the public key. Constraint: $\omega(\eta^2\log\lambda)$.
-    gamma: u32,
+    /// Rescale public key. It corresponds with the first element of the public key.
+    rsk: Integer,
 }
 
 impl Evaluator {
     /// Create a new [Evaluator] using the given scale-down keys and $\gamma$ parameter.
-    pub fn new(rsk: Vec<Integer>, gamma: u32) -> Self {
-        Evaluator { rsk, gamma }
+    pub fn new(rsk: Integer) -> Self {
+        Evaluator { rsk }
     }
 
     /// Addition of two [Ciphertext].
@@ -116,13 +114,8 @@ impl Evaluator {
 
     /// Scale down a given [Ciphertext] inplace to reduce its size.
     pub fn rescale_inplace(&self, a: &mut Ciphertext) {
-        let bound = Integer::from(1) << self.gamma;
         let raw_a: &mut Integer = a.into();
-        if raw_a.abs_ref().complete() > bound {
-            for i in 0..=self.gamma as usize {
-                *raw_a = (*raw_a).div_rem_round_ref(&self.rsk[i]).complete().1;
-            }
-        }
+        *raw_a = (*raw_a).div_rem_round_ref(&self.rsk).complete().1;
     }
 
     /// Multiplication of two [Ciphertext] and rescale down the result.
@@ -167,11 +160,7 @@ impl Evaluator {
 
     /// Get the memory footprint of the [Evaluator].
     pub fn get_size(&self) -> usize {
-        let mut size = size_of_val(self);
-        for i in &self.rsk {
-            size += size_of::<Integer>();
-            size += i.capacity() / (u8::BITS as usize);
-        }
-        size
+        let size = size_of_val(self);
+        size + (self.rsk.capacity() / (u8::BITS as usize))
     }
 }

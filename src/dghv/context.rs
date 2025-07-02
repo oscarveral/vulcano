@@ -3,7 +3,7 @@ use crate::{
     dghv::{Decryptor, Encryptor, Evaluator},
 };
 use rayon::{
-    iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
+    iter::{IntoParallelRefMutIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
 use rug::{Complete, Integer, ops::DivRounding};
@@ -18,12 +18,18 @@ pub struct Context {
     rho: u16,
     /// $\eta$ parameter. Bit-length of the secret key. Constraint: $\eta \geq \rho \cdot \Theta(\lambda\log^2\lambda)$.
     eta: u32,
-    /// $\gamma$ parameter. Bit-length of the integers in the public key. Constraint: $\omega(\eta^2\log\lambda)$.
+    /// $\gamma$ parameter. Bit-length of the integers in the public key. Constraint: $\gamma = \omega(\eta^2\log\lambda)$.
     gamma: u32,
     /// $\tau$ parameter. Number of integers in the public key. Constraint: $\tau \geq \gamma + \omega(\log\lambda)$.
     tau: u32,
+    /// $\kappa$ parameter. Precision of rationals on the public key. Constraint: $\kappa=\gamma + 2$.
+    kappa: u32,
     /// $\lambda$ parameter. General security parameter.
     lambda: u8,
+    /// $\theta$ parameter. Size of the sparse subset of rationals of the public ket. Constraint: $\theta = \lambda$
+    theta_small: u8,
+    /// $\Theta$ parameter. Number of samples of rational numbers on the public key. Constraint: $\Theta = \omega(\kappa\log\lambda)$
+    theta_big: u32,
 }
 
 /// Standard DGHV context with toy parameters.
@@ -34,6 +40,9 @@ pub const CONTEXT_TINY: Context = Context {
     gamma: 147456,
     tau: 158,
     lambda: 42,
+    kappa: 147458,
+    theta_small: 42,
+    theta_big: 144,
 };
 
 /// Standard DGHV context with parameters that yield smaller keys.
@@ -44,6 +53,9 @@ pub const CONTEXT_SMALL: Context = Context {
     gamma: 843033,
     tau: 572,
     lambda: 52,
+    kappa: 843035,
+    theta_small: 52,
+    theta_big: 533,
 };
 
 /// Standard DGHV context with secure parameters for medium-sized keys.
@@ -54,6 +66,9 @@ pub const CONTEXT_MEDIUM: Context = Context {
     gamma: 4251866,
     tau: 2110,
     lambda: 62,
+    kappa: 4251868,
+    theta_small: 62,
+    theta_big: 1972,
 };
 
 /// Standard DGHV context with secure parameters that yield large keys.
@@ -64,29 +79,12 @@ pub const CONTEXT_LARGE: Context = Context {
     gamma: 19575950,
     tau: 7659,
     lambda: 72,
+    kappa: 19575952,
+    theta_small: 72,
+    theta_big: 7897,
 };
 
 impl Context {
-    /// Create a DGHV context specifying all the parameters.
-    /// Be careful with the parameters used as it may result in an insecure scheme.
-    pub fn create_with_params(
-        lambda: u8,
-        rho: u16,
-        rho_prime: u16,
-        eta: u32,
-        gamma: u32,
-        tau: u32,
-    ) -> Context {
-        Context {
-            rho_prime,
-            rho,
-            eta,
-            gamma,
-            tau,
-            lambda,
-        }
-    }
-
     /// Calculate an upper bound on the multiplicative depth
     /// available for the given context parameters. Circuit depth is
     /// estimated via $d \leq \frac{\eta - 4 - \log{|f|}}{\rho\'+2}$.
@@ -111,7 +109,7 @@ impl Context {
         ((numerator_f64 / denominator_f64).floor() - 1.0).max(0.0) as u32
     }
 
-    /// Generate a secret key $p$ from the DGHV context.
+    /// Generate a secret key $p$ from the DGHV [Context].
     /// This function takes a sample $p\leftarrow(2\mathbb{Z}+1)\cap[2^{\eta-1}, 2^\eta)$.
     fn secret_key_sample(&self) -> Integer {
         let sk_bound: Integer = Integer::from(1) << (self.eta.checked_sub(1).unwrap());
@@ -120,7 +118,7 @@ impl Context {
         p
     }
 
-    /// Get a sample element for a public key from the DGHV context.
+    /// Get a sample element for a public key from the DGHV [Context].
     /// Given a secret key $p$ and parameters $\gamma$ and $\rho$. Sample $x=pq+r$
     /// with $q \leftarrow \mathbb{Z}\cap[0, 2^\gamma/p)$ and $r\leftarrow\mathbb{Z}\cap(-2^\rho, 2^\rho)$.
     fn public_key_element_sample(&self, secret: &Integer) -> Integer {
@@ -136,60 +134,33 @@ impl Context {
         (secret * q) + r
     }
 
+    /// Generate from a given secret $p$ the first element of a possible public key $pk$.
+    /// This element satisfies $pk_0 = pq$ with $q \leftarrow \mathbb{Z}\cap[0, 2^\gamma/p)$.
+    fn public_key_first_element_sample(&self, secret: &Integer) -> Integer {
+        let q_bound: Integer = (Integer::from(1) << self.gamma).div_ceil(secret);
+        let q = q_bound.random_below(&mut new_rand_state());
+        secret * q
+    }
+
     /// Generate a public key $pk$ from a DGHV context and a given secret $p$.
     /// $pk$ is a collection of $\tau + 1$ elements sampled the distribution specified on the
     /// [Context::public_key_element_sample](Context::public_key_element_sample) that satisfies
-    /// that $pk_0$ is the largest one, $pk_0$ is odd, and $pk_0\;\text{mod}\;p$ is even.
+    /// that $pk_0$ is the largest one, and $pk_0$ is an exact multiple of $p$.
     fn public_key_sample(&self, secret: &Integer) -> Vec<Integer> {
         let mut pk: Vec<Integer> = Vec::new();
         pk.resize((self.tau as usize).checked_add(1).unwrap(), Integer::new());
         loop {
-            pk.par_iter_mut().for_each(|x| {
+            pk[1..].par_iter_mut().for_each(|x| {
                 *x = self.public_key_element_sample(secret);
             });
-            pk.par_sort();
-            pk.reverse();
-            let remainder = pk[0].div_rem_round_ref(secret).complete().1;
-            if pk[0].find_one(0) == Some(0) && remainder.find_zero(0) == Some(0) {
+            pk[0] = self.public_key_first_element_sample(secret);
+            pk[1..].par_sort_unstable();
+            pk[1..].reverse();
+            if pk[0] >= pk[1] {
                 break;
             }
         }
         pk
-    }
-
-    /// Sample a [crate::dghv::Ciphertext] rescaling public key element using the given secret $p$ and index $i$.
-    /// Each rescaling element is $x_i\'\leftarrow 2(q_i\'\cdot p + r_i\')$ with
-    /// $q_i\'\leftarrow \mathbb{Z}\cap [2^{\gamma+i-1}/p,2^{\gamma+i}/p]$ and $r_i\'=
-    /// \mathbb{Z}\cap (-2^\rho, 2^\rho)$.
-    fn rescale_key_element_sample(&self, secret: &Integer, index: u32) -> Integer {
-        let r_bound = Integer::from(1) << (self.rho as u32 + 1);
-        let mut r = Integer::from(0);
-        while r == 0 {
-            r = r_bound.random_below_ref(&mut new_rand_state()).complete()
-        }
-        r -= r_bound >> 1;
-        let shift = self
-            .gamma
-            .checked_add(index)
-            .unwrap()
-            .checked_sub(1)
-            .unwrap();
-        let q_bound: Integer = (Integer::from(1) << shift).div_ceil(secret);
-        let q = q_bound.random_below_ref(&mut new_rand_state()).complete() + q_bound;
-        2 * (q * secret + r)
-    }
-
-    /// Create a rescaling key using the given secret. A rescaling key is a vector of
-    /// $\gamma + 1$ decreasingly bigger integers used to reduce [crate::dghv::Ciphertext] size.
-    fn rescale_key_sample(&self, secret: &Integer) -> Vec<Integer> {
-        let mut rescale_pk: Vec<Integer> = Vec::new();
-        rescale_pk.resize(self.gamma.checked_add(1).unwrap() as usize, Integer::new());
-        rescale_pk
-            .par_iter_mut()
-            .zip((0..=self.gamma).collect::<Vec<_>>())
-            .for_each(|x| *x.0 = self.rescale_key_element_sample(secret, x.1));
-        rescale_pk.reverse();
-        rescale_pk
     }
 
     /// Generate a tuple with an [Encryptor], [Decryptor] and [Evaluator] based on
@@ -197,11 +168,11 @@ impl Context {
     pub fn key_gen(&self) -> (Encryptor, Decryptor, Evaluator) {
         let sk = self.secret_key_sample();
         let pk = self.public_key_sample(&sk);
-        let rsk = self.rescale_key_sample(&sk);
+        let rsk = pk[0].clone();
         (
             Encryptor::new(pk, self.rho_prime, self.tau),
             Decryptor::new(sk),
-            Evaluator::new(rsk, self.gamma),
+            Evaluator::new(rsk),
         )
     }
 

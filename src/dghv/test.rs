@@ -85,7 +85,7 @@ fn rescale() {
     let depth = ctx.max_multiplication_depth(0.0);
     let (enc, dec, eval) = ctx.key_gen();
     let mut c1 = enc.encrypt(false);
-    let c2 = c1.clone();
+    let mut c2 = c1.clone();
 
     for _ in 0..depth {
         eval.mult_inplace_ref(&mut c1, &c2);
@@ -94,6 +94,18 @@ fn rescale() {
         assert!(c1.get_size() <= size, "Rescaling failed!");
         let res = dec.decrypt(c1.clone());
         assert_eq!(res, false, "Expected a false value on the assertion!");
+    }
+
+    c1 = enc.encrypt(true);
+    c2 = c1.clone();
+
+    for _ in 0..depth {
+        eval.mult_inplace_ref(&mut c1, &c2);
+        let size = c1.get_size();
+        eval.rescale_inplace(&mut c1);
+        assert!(c1.get_size() <= size, "Rescaling failed!");
+        let res = dec.decrypt(c1.clone());
+        assert_eq!(res, true, "Expected a false value on the assertion!");
     }
 }
 
