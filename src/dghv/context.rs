@@ -3,7 +3,7 @@ use crate::{
     dghv::{Decryptor, Encryptor, Evaluator},
 };
 use rayon::{
-    iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
+    iter::{IntoParallelRefMutIterator, ParallelIterator},
     slice::ParallelSliceMut,
 };
 use rug::{Complete, Integer, ops::DivRounding};
@@ -136,72 +136,55 @@ impl Context {
         (secret * q) + r
     }
 
+    /// Get the first element of the public key.
+    /// Given a secret key $p$ and parameter $\gamma$. Sample $x_0=pq$ with
+    /// $q \leftarrow \mathbb{Z}\cap[0, 2^\gamma/p)$.
+    fn rescale_key_sample(&self, secret: &Integer) -> Integer {
+        let q_bound: Integer = (Integer::from(1) << self.gamma).div_ceil(secret);
+        let q = q_bound.random_below(&mut new_rand_state());
+        secret * q
+    }
+
     /// Generate a public key $pk$ from a DGHV context and a given secret $p$.
     /// $pk$ is a collection of $\tau + 1$ elements sampled the distribution specified on the
-    /// [Context::public_key_element_sample](Context::public_key_element_sample) that satisfies
-    /// that $pk_0$ is the largest one, $pk_0$ is odd, and $pk_0\;\text{mod}\;p$ is even.
-    fn public_key_sample(&self, secret: &Integer) -> Vec<Integer> {
+    /// [Context::public_key_element_sample](Context::public_key_element_sample) except $pk_0 that
+    /// satisfies $pk_0$ is the largest one, $pk_0$ is odd and $pk_0$ is an exact multiple of $p$.
+    /// $pk_0$ will be used also as the rescaling key.
+    fn public_key_sample(&self, secret: &Integer) -> (Vec<Integer>, Integer) {
         let mut pk: Vec<Integer> = Vec::new();
         pk.resize((self.tau as usize).checked_add(1).unwrap(), Integer::new());
         loop {
-            pk.par_iter_mut().for_each(|x| {
+            pk[1..].par_iter_mut().for_each(|x| {
                 *x = self.public_key_element_sample(secret);
             });
-            pk.par_sort();
-            pk.reverse();
-            let remainder = pk[0].div_rem_round_ref(secret).complete().1;
-            if pk[0].find_one(0) == Some(0) && remainder.find_zero(0) == Some(0) {
+
+            pk[0] = self.rescale_key_sample(secret);
+
+            pk[1..].par_sort();
+            pk[1..].reverse();
+
+            // Assert our chosen $pk_0$ is the bigger element of the public key.
+            if pk[0] < pk[1] {
+                continue;
+            }
+
+            if pk[0].find_one(0) == Some(0) {
                 break;
             }
         }
-        pk
-    }
-
-    /// Sample a [crate::dghv::Ciphertext] rescaling public key element using the given secret $p$ and index $i$.
-    /// Each rescaling element is $x_i\'\leftarrow 2(q_i\'\cdot p + r_i\')$ with
-    /// $q_i\'\leftarrow \mathbb{Z}\cap [2^{\gamma+i-1}/p,2^{\gamma+i}/p]$ and $r_i\'=
-    /// \mathbb{Z}\cap (-2^\rho, 2^\rho)$.
-    fn rescale_key_element_sample(&self, secret: &Integer, index: u32) -> Integer {
-        let r_bound = Integer::from(1) << (self.rho as u32 + 1);
-        let mut r = Integer::from(0);
-        while r == 0 {
-            r = r_bound.random_below_ref(&mut new_rand_state()).complete()
-        }
-        r -= r_bound >> 1;
-        let shift = self
-            .gamma
-            .checked_add(index)
-            .unwrap()
-            .checked_sub(1)
-            .unwrap();
-        let q_bound: Integer = (Integer::from(1) << shift).div_ceil(secret);
-        let q = q_bound.random_below_ref(&mut new_rand_state()).complete() + q_bound;
-        2 * (q * secret + r)
-    }
-
-    /// Create a rescaling key using the given secret. A rescaling key is a vector of
-    /// $\gamma + 1$ decreasingly bigger integers used to reduce [crate::dghv::Ciphertext] size.
-    fn rescale_key_sample(&self, secret: &Integer) -> Vec<Integer> {
-        let mut rescale_pk: Vec<Integer> = Vec::new();
-        rescale_pk.resize(self.gamma.checked_add(1).unwrap() as usize, Integer::new());
-        rescale_pk
-            .par_iter_mut()
-            .zip((0..=self.gamma).collect::<Vec<_>>())
-            .for_each(|x| *x.0 = self.rescale_key_element_sample(secret, x.1));
-        rescale_pk.reverse();
-        rescale_pk
+        let rsk = pk[0].clone();
+        (pk, rsk)
     }
 
     /// Generate a tuple with an [Encryptor], [Decryptor] and [Evaluator] based on
     /// the parameters of the calling [Context].
     pub fn key_gen(&self) -> (Encryptor, Decryptor, Evaluator) {
         let sk = self.secret_key_sample();
-        let pk = self.public_key_sample(&sk);
-        let rsk = self.rescale_key_sample(&sk);
+        let (pk, rsk) = self.public_key_sample(&sk);
         (
             Encryptor::new(pk, self.rho_prime, self.tau),
             Decryptor::new(sk),
-            Evaluator::new(rsk, self.gamma),
+            Evaluator::new(rsk),
         )
     }
 

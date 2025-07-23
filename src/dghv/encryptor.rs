@@ -41,7 +41,7 @@ impl Encryptor {
         r *= 2;
         sum += r;
         sum += val as u8;
-        let (_, sum) = sum.div_rem_round_ref(&self.pk[0]).complete(); // Change from modulo_mut
+        let (_, sum) = sum.div_rem_round_ref(&self.pk[0]).complete();
         Ciphertext::from(sum)
     }
 
