@@ -16,7 +16,7 @@ pub struct Context {
     rho_prime: u16,
     /// $\rho$ parameter. Bit-length of the noise. Constraint: $\rho = \omega(\log\lambda)$.
     rho: u16,
-    /// $\eta$ parameter. Bit-length of the secret key. Constraint: $\eta \geq \rho \cdot \Theta(\lambda\log^2\lambda)$.
+    /// $\eta$ parameter. Bit-length of the generator key. Constraint: $\eta \geq \rho \cdot \Theta(\lambda\log^2\lambda)$.
     eta: u32,
     /// $\gamma$ parameter. Bit-length of the integers in the public key. Constraint: $\omega(\eta^2\log\lambda)$.
     gamma: u32,
@@ -67,26 +67,6 @@ pub const CONTEXT_LARGE: Context = Context {
 };
 
 impl Context {
-    /// Create a DGHV context specifying all the parameters.
-    /// Be careful with the parameters used as it may result in an insecure scheme.
-    pub fn create_with_params(
-        lambda: u8,
-        rho: u16,
-        rho_prime: u16,
-        eta: u32,
-        gamma: u32,
-        tau: u32,
-    ) -> Context {
-        Context {
-            rho_prime,
-            rho,
-            eta,
-            gamma,
-            tau,
-            lambda,
-        }
-    }
-
     /// Calculate an upper bound on the multiplicative depth
     /// available for the given context parameters. Circuit depth is
     /// estimated via $d \leq \frac{\eta - 4 - \log{|f|}}{\rho\'+2}$.
@@ -111,9 +91,9 @@ impl Context {
         ((numerator_f64 / denominator_f64).floor() - 1.0).max(0.0) as u32
     }
 
-    /// Generate a secret key $p$ from the DGHV context.
+    /// Generate a generator key $p$ from the DGHV context.
     /// This function takes a sample $p\leftarrow(2\mathbb{Z}+1)\cap[2^{\eta-1}, 2^\eta)$.
-    fn secret_key_sample(&self) -> Integer {
+    fn generator_key_sample(&self) -> Integer {
         let sk_bound: Integer = Integer::from(1) << (self.eta.checked_sub(1).unwrap());
         let p: Integer =
             (sk_bound.random_below_ref(&mut new_rand_state()).complete() + sk_bound) | 0x1;
@@ -121,7 +101,7 @@ impl Context {
     }
 
     /// Get a sample element for a public key from the DGHV context.
-    /// Given a secret key $p$ and parameters $\gamma$ and $\rho$. Sample $x=pq+r$
+    /// Given a generator key $p$ and parameters $\gamma$ and $\rho$. Sample $x=pq+r$
     /// with $q \leftarrow \mathbb{Z}\cap[0, 2^\gamma/p)$ and $r\leftarrow\mathbb{Z}\cap(-2^\rho, 2^\rho)$.
     fn public_key_element_sample(&self, secret: &Integer) -> Integer {
         let q_bound: Integer = (Integer::from(1) << self.gamma).div_ceil(secret);
@@ -137,7 +117,7 @@ impl Context {
     }
 
     /// Get the first element of the public key.
-    /// Given a secret key $p$ and parameter $\gamma$. Sample $x_0=pq$ with
+    /// Given a generator key $p$ and parameter $\gamma$. Sample $x_0=pq$ with
     /// $q \leftarrow \mathbb{Z}\cap[0, 2^\gamma/p)$.
     fn rescale_key_sample(&self, secret: &Integer) -> Integer {
         let q_bound: Integer = (Integer::from(1) << self.gamma).div_ceil(secret);
@@ -145,7 +125,7 @@ impl Context {
         secret * q
     }
 
-    /// Generate a public key $pk$ from a DGHV context and a given secret $p$.
+    /// Generate a public key $pk$ from a DGHV context and a given generator $p$.
     /// $pk$ is a collection of $\tau + 1$ elements sampled the distribution specified on the
     /// [Context::public_key_element_sample](Context::public_key_element_sample) except $pk_0 that
     /// satisfies $pk_0$ is the largest one, $pk_0$ is odd and $pk_0$ is an exact multiple of $p$.
@@ -179,11 +159,11 @@ impl Context {
     /// Generate a tuple with an [Encryptor], [Decryptor] and [Evaluator] based on
     /// the parameters of the calling [Context].
     pub fn key_gen(&self) -> (Encryptor, Decryptor, Evaluator) {
-        let sk = self.secret_key_sample();
-        let (pk, rsk) = self.public_key_sample(&sk);
+        let g = self.generator_key_sample();
+        let (pk, rsk) = self.public_key_sample(&g);
         (
             Encryptor::new(pk, self.rho_prime, self.tau),
-            Decryptor::new(sk),
+            Decryptor::new(g),
             Evaluator::new(rsk),
         )
     }
