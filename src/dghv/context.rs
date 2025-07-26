@@ -1,7 +1,9 @@
+use crate::dghv::random::Randomizer;
 use crate::{
     dghv::random::new_rand_state,
     dghv::{Decryptor, Encryptor, Evaluator},
 };
+use rand::seq::SliceRandom;
 use rayon::{
     iter::{IntoParallelRefMutIterator, ParallelIterator},
     slice::ParallelSliceMut,
@@ -174,11 +176,47 @@ impl Context {
         (pk, rsk)
     }
 
+    /// Generate a secret key using the current parameters. Secret key consist of a list of indexes
+    /// of the bootstrapping key elements that are the valid elements.
+    fn secret_key_sample(&self) -> Vec<usize> {
+        let mut indexes = (0..self.theta_big as usize).collect::<Vec<usize>>();
+        indexes.shuffle(&mut Randomizer::new());
+        indexes.into_iter().take(self.theta as usize).collect()
+    }
+
+    /// Generate the bootstrapping key elements. Most are integers random on the range $[0, 2^{\kappa+1})$
+    /// with the exception on the ones at indexes indicated by the given secret, that are random on the
+    /// same range but satisfy $\sum_{i\inS}u_i = x_p (\mod 2^{\kappa+1)$ with $x_p = \lfloor 2^\kappa / p \rceil$.
+    /// Return the vector of said integers. Scaling into rationals is done at runtime.
+    fn bootstraping_key_sample(&self, generator: &Integer, secret: &Vec<usize>) -> Vec<Integer> {
+        let bound = Integer::from(1) << (self.kappa.checked_add(1).unwrap());
+
+        let mut samples: Vec<Integer> = vec![Integer::from(0); self.theta_big as usize];
+        samples.par_iter_mut().for_each(|x| {
+            *x = bound.random_below_ref(&mut new_rand_state()).complete();
+        });
+
+        let x_p = (Integer::from(1) << self.kappa).div_rem_round_ref(generator).complete().0;
+        let mut sum: Integer = Integer::from(0);
+        let mut rng = new_rand_state();
+        for i in 0..(secret.len() - 1) {
+            let val = bound.random_below_ref(&mut rng).complete();
+            sum += &val;
+            samples[secret[i]] = val;
+        }
+        let last_u = (x_p.clone() - sum).modulo(&bound);
+        samples[secret[secret.len() - 1]] = last_u;
+
+        samples
+    }
+
     /// Generate a tuple with an [Encryptor], [Decryptor] and [Evaluator] based on
     /// the parameters of the calling [Context].
     pub fn key_gen(&self) -> (Encryptor, Decryptor, Evaluator) {
         let g = self.generator_key_sample();
+        let sk = self.secret_key_sample();
         let (pk, rsk) = self.public_key_sample(&g);
+        let bsk = self.bootstraping_key_sample(&g, &sk);
         (
             Encryptor::new(pk, self.rho_prime, self.tau),
             Decryptor::new(g),
