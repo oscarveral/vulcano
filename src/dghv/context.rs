@@ -24,6 +24,12 @@ pub struct Context {
     tau: u32,
     /// $\lambda$ parameter. General security parameter.
     lambda: u8,
+    /// $\kappa$ parameter. Bit precision of elements of the bootstrapping key. Constraint: $\kappa = \gamma + 2$.
+    kappa: u32,
+    /// $\theta$ parameter. Size of the sparse subset of bootstrapping keys that compose the public key. Constraint $\theta = \lambda$.
+    theta: u8,
+    /// $\Theta$ parameter. Number of samples on the bootstrapping key. Constraint: $\Theta = \omega(\kappa\log\lambda)$.
+    theta_big: u32,
 }
 
 /// Standard DGHV context with toy parameters.
@@ -34,6 +40,9 @@ pub const CONTEXT_TINY: Context = Context {
     gamma: 147456,
     tau: 158,
     lambda: 42,
+    kappa: 147458,
+    theta: 42,
+    theta_big: 150,
 };
 
 /// Standard DGHV context with parameters that yield smaller keys.
@@ -44,6 +53,9 @@ pub const CONTEXT_SMALL: Context = Context {
     gamma: 843033,
     tau: 572,
     lambda: 52,
+    kappa: 843035,
+    theta: 52,
+    theta_big: 555,
 };
 
 /// Standard DGHV context with secure parameters for medium-sized keys.
@@ -54,6 +66,9 @@ pub const CONTEXT_MEDIUM: Context = Context {
     gamma: 4251866,
     tau: 2110,
     lambda: 62,
+    kappa: 4251868,
+    theta: 62,
+    theta_big: 2070,
 };
 
 /// Standard DGHV context with secure parameters that yield large keys.
@@ -64,6 +79,9 @@ pub const CONTEXT_LARGE: Context = Context {
     gamma: 19575950,
     tau: 7659,
     lambda: 72,
+    kappa: 19575952,
+    theta: 72,
+    theta_big: 7965,
 };
 
 impl Context {
