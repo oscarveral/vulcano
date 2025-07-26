@@ -196,7 +196,10 @@ impl Context {
             *x = bound.random_below_ref(&mut new_rand_state()).complete();
         });
 
-        let x_p = (Integer::from(1) << self.kappa).div_rem_round_ref(generator).complete().0;
+        let x_p = (Integer::from(1) << self.kappa)
+            .div_rem_round_ref(generator)
+            .complete()
+            .0;
         let mut sum: Integer = Integer::from(0);
         let mut rng = new_rand_state();
         for i in 0..(secret.len() - 1) {
