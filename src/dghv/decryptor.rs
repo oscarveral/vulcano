@@ -1,34 +1,23 @@
-use rug::{Complete, Integer};
+use crate::dghv::ciphertext::Ciphertext;
+use crate::dghv::math::remainder;
+use rug::Integer;
 
-use crate::dghv::Ciphertext;
-
-/// DGHV [Decryptor].
-/// Allows the decryption of boolean values stored in [Ciphertext] data.
-#[derive(Debug)]
+/// A [Decryptor] used to decrypt [Ciphertext].
 pub struct Decryptor {
-    /// Secret key $sk$. Allows decryption of [Ciphertext]
-    sk: Integer,
+    /// Secret generator value used.
+    generator: Integer,
 }
 
 impl Decryptor {
-    /// Create a new [Decryptor] with the given secret key.
-    pub fn new(sk: Integer) -> Self {
-        Decryptor { sk }
+    /// Create a new [Decryptor] using the given generator.
+    pub fn new(generator: Integer) -> Self {
+        Self { generator }
     }
 
-    /// Retrieve the boolean value stored in a given ciphertext.
-    pub fn decrypt(&self, val: Ciphertext) -> bool {
-        let centered_remainder = <Ciphertext as Into<Integer>>::into(val)
-            .div_rem_round_ref(&self.sk)
-            .complete()
-            .1;
-        let res = centered_remainder.modulo(&Integer::from(2));
-        !res.is_zero()
-    }
-
-    /// Get the memory footprint in bytes of the [Decryptor].
-    pub fn get_size(&self) -> usize {
-        let size = size_of_val(self);
-        size + (self.sk.capacity() / (u8::BITS as usize))
+    /// Decrypt the given [Ciphertext] into a boolean value.
+    pub fn decrypt(&self, ciphertext: Ciphertext) -> bool {
+        let raw: Integer = ciphertext.into();
+        let rem = remainder(&raw, &self.generator);
+        remainder(&rem, &Integer::from(2)).is_odd()
     }
 }

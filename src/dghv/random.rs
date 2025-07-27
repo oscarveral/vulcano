@@ -1,4 +1,5 @@
-use rand::{RngCore, SeedableRng, rngs::StdRng};
+use rand::rngs::StdRng;
+use rand::{RngCore, SeedableRng};
 use rug::rand::{RandGen, RandState};
 
 /// Box a [Randomizer] with in a [RandState] to be used as a
@@ -20,11 +21,10 @@ impl Randomizer {
         let rng = StdRng::from_os_rng();
         Randomizer { rng }
     }
-}
 
-impl Default for Randomizer {
-    fn default() -> Self {
-        Self::new()
+    /// Sample a new random usize.
+    pub fn next_usize(&mut self) -> usize {
+        self.next_u64() as usize
     }
 }
 

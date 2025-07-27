@@ -1,240 +1,102 @@
-use crate::dghv::random::Randomizer;
-use crate::{
-    dghv::random::new_rand_state,
-    dghv::{Decryptor, Encryptor, Evaluator},
-};
-use rand::seq::SliceRandom;
-use rayon::{
-    iter::{IntoParallelRefMutIterator, ParallelIterator},
-    slice::ParallelSliceMut,
-};
-use rug::{Complete, Integer, ops::DivRounding};
+use crate::dghv::decryptor::Decryptor;
+use crate::dghv::distribution::{GeneratorSampler, PublicKeySampler};
+use crate::dghv::encryptor::Encryptor;
+use crate::dghv::evaluator::Evaluator;
+use crate::dghv::parameters::Parameters;
+use rayon::iter::IntoParallelRefMutIterator;
+use rayon::iter::ParallelIterator;
+use rayon::slice::ParallelSliceMut;
+use rug::Integer;
 
-/// DGHV [Context].
-/// Store all the parameters used by the scheme.
-#[derive(Debug)]
+/// Crypto context for the DGHV Scheme. Contain all necessary sampler and pre-computations
+/// needed for the generation of [Encryptor], [Decryptor] and [Evaluator] components.
 pub struct Context {
-    /// $\rho\'$ parameter. Secondary noise parameter. Constraint: $\rho\' = \rho + \omega(\log\lambda)$.
-    rho_prime: u16,
-    /// $\rho$ parameter. Bit-length of the noise. Constraint: $\rho = \omega(\log\lambda)$.
-    rho: u16,
-    /// $\eta$ parameter. Bit-length of the generator key. Constraint: $\eta \geq \rho \cdot \Theta(\lambda\log^2\lambda)$.
-    eta: u32,
-    /// $\gamma$ parameter. Bit-length of the integers in the public key. Constraint: $\omega(\eta^2\log\lambda)$.
-    gamma: u32,
-    /// $\tau$ parameter. Number of integers in the public key. Constraint: $\tau \geq \gamma + \omega(\log\lambda)$.
-    tau: u32,
-    /// $\lambda$ parameter. General security parameter.
-    lambda: u8,
-    /// $\kappa$ parameter. Bit precision of elements of the bootstrapping key. Constraint: $\kappa = \gamma + 2$.
-    kappa: u32,
-    /// $\theta$ parameter. Size of the sparse subset of bootstrapping keys that compose the public key. Constraint $\theta = \lambda$.
-    theta: u8,
-    /// $\Theta$ parameter. Number of samples on the bootstrapping key. Constraint: $\Theta = \omega(\kappa\log\lambda)$.
-    theta_big: u32,
+    /// Params used by this [Context].
+    params: Parameters,
+    /// Sampler used for public key elements and downsize key.
+    pk_sampler: PublicKeySampler,
 }
 
-/// Standard DGHV context with toy parameters.
-pub const CONTEXT_TINY: Context = Context {
-    rho_prime: 52,
-    rho: 26,
-    eta: 988,
-    gamma: 147456,
-    tau: 158,
-    lambda: 42,
-    kappa: 147458,
-    theta: 42,
-    theta_big: 150,
-};
-
-/// Standard DGHV context with parameters that yield smaller keys.
-pub const CONTEXT_SMALL: Context = Context {
-    rho_prime: 82,
-    rho: 41,
-    eta: 1558,
-    gamma: 843033,
-    tau: 572,
-    lambda: 52,
-    kappa: 843035,
-    theta: 52,
-    theta_big: 555,
-};
-
-/// Standard DGHV context with secure parameters for medium-sized keys.
-pub const CONTEXT_MEDIUM: Context = Context {
-    rho_prime: 112,
-    rho: 56,
-    eta: 2128,
-    gamma: 4251866,
-    tau: 2110,
-    lambda: 62,
-    kappa: 4251868,
-    theta: 62,
-    theta_big: 2070,
-};
-
-/// Standard DGHV context with secure parameters that yield large keys.
-pub const CONTEXT_LARGE: Context = Context {
-    rho_prime: 142,
-    rho: 71,
-    eta: 2698,
-    gamma: 19575950,
-    tau: 7659,
-    lambda: 72,
-    kappa: 19575952,
-    theta: 72,
-    theta_big: 7965,
-};
-
 impl Context {
-    /// Calculate an upper bound on the multiplicative depth
-    /// available for the given context parameters. Circuit depth is
-    /// estimated via $d \leq \frac{\eta - 4 - \log{|f|}}{\rho\'+2}$.
-    /// As $d$ must be smaller than the right term, one is subtracted
-    /// from the result to avoid going too close to the limit.
-    ///
-    /// The log_f_norm parameter corresponds with $\log{|f|}$ with $|f|$ the $l_1$
-    /// norm of the coefficient vector of $f$, being $f$ the polynomial computed
-    /// equivalent to the specific circuit being evaluated. Boolean multiplications
-    /// translate into $f(m_1,m_2) = m_1m_2 \rightarrow |f| = \sum\lbrace|1|\rbrace$ on integer algebra
-    /// and boolean additions into $f(m_1,m_2)=m_1+m_2-2m_1m_2 \rightarrow |f| = \sum\lbrace|1|,|1|,|-2|\rbrace$.
-    pub fn max_multiplication_depth(&self, log_f_norm: f64) -> u32 {
-        let numerator_f64 = self.eta as f64 - 4.0 - log_f_norm;
-        if numerator_f64 <= 0.0 {
-            return 0;
+    /// Create a new [Context] using the given [Parameters].
+    pub fn new(params: Parameters) -> Self {
+        let mut generator_sampler = GeneratorSampler::new(params.eta);
+        let pk_sampler =
+            PublicKeySampler::new(params.gamma, params.rho, generator_sampler.sample());
+
+        Self { params, pk_sampler }
+    }
+
+    /// Generate new precomputations and samplers for the current [Context]
+    pub fn refresh_context(&mut self) {
+        let mut generator_sampler = GeneratorSampler::new(self.params.eta);
+        self.pk_sampler = PublicKeySampler::new(
+            self.params.gamma,
+            self.params.rho,
+            generator_sampler.sample(),
+        );
+    }
+
+    /// Change the [Parameters] of the [Context] and refresh all precomputations and samplers.
+    pub fn change_params(&mut self, new_params: Parameters) {
+        self.params = new_params;
+        self.refresh_context();
+    }
+
+    /// Get the current secret generator key from the [GeneratorSampler]
+    pub fn generator_key_sample(&self) -> Integer {
+        self.pk_sampler.get_generator()
+    }
+
+    /// Sample a downsize key using the current [Context] [PublicKeySampler] noiseless distribution.
+    /// As it is the first element of the public key, it must be odd.
+    pub fn downsize_key_sample(&mut self) -> Integer {
+        let mut rsk = self.pk_sampler.sample_without_noise();
+        while rsk.is_even() {
+            rsk = self.pk_sampler.sample_without_noise();
         }
-        let denominator_f64 = self.rho_prime as f64 + 2.0;
-        if denominator_f64 == 0.0 {
-            return 0;
-        }
-        // Return the one below to make sure the depth is valid.
-        ((numerator_f64 / denominator_f64).floor() - 1.0).max(0.0) as u32
+        rsk
     }
 
-    /// Generate a generator key $p$ from the DGHV context.
-    /// This function takes a sample $p\leftarrow(2\mathbb{Z}+1)\cap[2^{\eta-1}, 2^\eta)$.
-    fn generator_key_sample(&self) -> Integer {
-        let sk_bound: Integer = Integer::from(1) << (self.eta.checked_sub(1).unwrap());
-        let p: Integer =
-            (sk_bound.random_below_ref(&mut new_rand_state()).complete() + sk_bound) | 0x1;
-        p
-    }
-
-    /// Get a sample element for a public key from the DGHV context.
-    /// Given a generator key $p$ and parameters $\gamma$ and $\rho$. Sample $x=pq+r$
-    /// with $q \leftarrow \mathbb{Z}\cap[0, 2^\gamma/p)$ and $r\leftarrow\mathbb{Z}\cap(-2^\rho, 2^\rho)$.
-    fn public_key_element_sample(&self, secret: &Integer) -> Integer {
-        let q_bound: Integer = (Integer::from(1) << self.gamma).div_ceil(secret);
-        let r_bound: Integer = Integer::from(1) << (self.rho as u32 + 1);
-        let q = q_bound.random_below(&mut new_rand_state());
-        let mut r: Integer = Integer::from(0);
-        while r == 0 {
-            r = r_bound.random_below_ref(&mut new_rand_state()).complete()
-        }
-        r -= r_bound >> 1;
-
-        (secret * q) + r
-    }
-
-    /// Get the first element of the public key.
-    /// Given a generator key $p$ and parameter $\gamma$. Sample $x_0=pq$ with
-    /// $q \leftarrow \mathbb{Z}\cap[0, 2^\gamma/p)$.
-    fn rescale_key_sample(&self, secret: &Integer) -> Integer {
-        let q_bound: Integer = (Integer::from(1) << self.gamma).div_ceil(secret);
-        let q = q_bound.random_below(&mut new_rand_state());
-        secret * q
-    }
-
-    /// Generate a public key $pk$ from a DGHV context and a given generator $p$.
-    /// $pk$ is a collection of $\tau + 1$ elements sampled the distribution specified on the
-    /// [Context::public_key_element_sample](Context::public_key_element_sample) except $pk_0 that
-    /// satisfies $pk_0$ is the largest one, $pk_0$ is odd and $pk_0$ is an exact multiple of $p$.
-    /// $pk_0$ will be used also as the rescaling key.
-    fn public_key_sample(&self, secret: &Integer) -> (Vec<Integer>, Integer) {
-        let mut pk: Vec<Integer> = Vec::new();
-        pk.resize((self.tau as usize).checked_add(1).unwrap(), Integer::new());
+    /// Sample a public key using the current [Context] samplers.
+    /// Public key is a collection of $\tau$ integers sampled from the noisy distribution specified at [PublicKeySampler]
+    /// but with the first element being the downsize key, that must the largest element of the collection,
+    /// must be odd, and an exact multiple of the secret generator integer $p$, i.e. sampled from the noiseless
+    /// distribution of [PublicKeySampler]. Returns the public key and downsize key.
+    pub fn public_key_sample(&mut self) -> (Vec<Integer>, Integer) {
+        let mut pk: Vec<Integer> = vec![
+            Integer::from(0);
+            self.params
+                .tau
+                .try_into()
+                .unwrap_or_else(|_| panic!("Param τ overflow!"))
+        ];
         loop {
             pk[1..].par_iter_mut().for_each(|x| {
-                *x = self.public_key_element_sample(secret);
+                *x = self.pk_sampler.sample_with_noise_par();
             });
 
-            pk[0] = self.rescale_key_sample(secret);
-
-            pk[1..].par_sort();
+            pk[1..].par_sort_unstable();
             pk[1..].reverse();
 
-            // Assert our chosen $pk_0$ is the bigger element of the public key.
-            if pk[0] < pk[1] {
-                continue;
-            }
+            pk[0] = self.downsize_key_sample();
 
-            if pk[0].find_one(0) == Some(0) {
+            if pk[0] >= pk[1] {
                 break;
             }
         }
-        let rsk = pk[0].clone();
-        (pk, rsk)
+
+        let dsk = pk[0].clone();
+        (pk, dsk)
     }
 
-    /// Generate a secret key using the current parameters. Secret key consist of a list of indexes
-    /// of the bootstrapping key elements that are the valid elements.
-    fn secret_key_sample(&self) -> Vec<usize> {
-        let mut indexes = (0..self.theta_big as usize).collect::<Vec<usize>>();
-        indexes.shuffle(&mut Randomizer::new());
-        indexes.into_iter().take(self.theta as usize).collect()
-    }
-
-    /// Generate the bootstrapping key elements. Most are integers random on the range $[0, 2^{\kappa+1})$
-    /// with the exception on the ones at indexes indicated by the given secret, that are random on the
-    /// same range but satisfy $\sum_{i\inS}u_i = x_p (\mod 2^{\kappa+1)$ with $x_p = \lfloor 2^\kappa / p \rceil$.
-    /// Return the vector of said integers. Scaling into rationals is done at runtime.
-    fn bootstraping_key_sample(&self, generator: &Integer, secret: &Vec<usize>) -> Vec<Integer> {
-        let bound = Integer::from(1) << (self.kappa.checked_add(1).unwrap());
-
-        let mut samples: Vec<Integer> = vec![Integer::from(0); self.theta_big as usize];
-        samples.par_iter_mut().for_each(|x| {
-            *x = bound.random_below_ref(&mut new_rand_state()).complete();
-        });
-
-        let x_p = (Integer::from(1) << self.kappa)
-            .div_rem_round_ref(generator)
-            .complete()
-            .0;
-        let mut sum: Integer = Integer::from(0);
-        let mut rng = new_rand_state();
-        for i in 0..(secret.len() - 1) {
-            let val = bound.random_below_ref(&mut rng).complete();
-            sum += &val;
-            samples[secret[i]] = val;
-        }
-        let last_u = (x_p.clone() - sum).modulo(&bound);
-        samples[secret[secret.len() - 1]] = last_u;
-
-        samples
-    }
-
-    /// Generate a tuple with an [Encryptor], [Decryptor] and [Evaluator] based on
-    /// the parameters of the calling [Context].
-    pub fn key_gen(&self) -> (Encryptor, Decryptor, Evaluator) {
+    pub fn key_gen(&mut self) -> (Encryptor, Decryptor, Evaluator) {
         let g = self.generator_key_sample();
-        let sk = self.secret_key_sample();
-        let (pk, rsk) = self.public_key_sample(&g);
-        let bsk = self.bootstraping_key_sample(&g, &sk);
+        let (pk, dsk) = self.public_key_sample();
         (
-            Encryptor::new(pk, self.rho_prime, self.tau),
+            Encryptor::new(pk, self.params.tau, self.params.rho_prime),
             Decryptor::new(g),
-            Evaluator::new(rsk),
+            Evaluator::new(dsk),
         )
-    }
-
-    /// Get the security parameter $\lambda$ from the
-    /// calling [Context].
-    pub fn get_security(&self) -> u8 {
-        self.lambda
-    }
-
-    /// Get the memory footprint of a given [Context] in bytes.
-    pub fn get_size(&self) -> usize {
-        size_of_val(self)
     }
 }

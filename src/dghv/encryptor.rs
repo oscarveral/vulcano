@@ -1,57 +1,47 @@
-use crate::{
-    dghv::Ciphertext,
-    dghv::random::{Randomizer, new_rand_state},
-};
-use rand::{RngCore, seq::IteratorRandom};
-use rug::{Complete, Integer};
+use crate::dghv::ciphertext::Ciphertext;
+use crate::dghv::distribution::{NoiseSampler, SubsetSampler};
+use crate::dghv::math::remainder;
+use rug::Integer;
 
-/// DGHV [Encryptor].
-/// Allows the creation of [Ciphertext] with encrypted boolean values.
-#[derive(Debug)]
+/// [Encryptor] used to create fresh [ciphertexts](Ciphertext)
 pub struct Encryptor {
-    /// Public key $pk$. A collection of integers.
+    /// Public key elements.
     pk: Vec<Integer>,
-    /// $\rho\'$ parameter. Secondary noise parameter. Constraint: $\rho\' = \rho + \omega(\log\lambda)$.
-    rho_prime: u16,
-    /// $\tau$ parameter. Number of integers in the public key. Constraint: $\tau \geq \gamma + \omega(\log\lambda)$.
-    tau: u32,
+    /// Sampler for sparse subsets.
+    subset_sampler: SubsetSampler,
+    /// Sampler for noise.
+    noise_sampler: NoiseSampler,
 }
 
 impl Encryptor {
-    /// Create a new [Encryptor] with the given public key $pk$ and
-    /// the parameters $\rho\'$ and $\tau$.
-    pub fn new(pk: Vec<Integer>, rho_prime: u16, tau: u32) -> Self {
-        Encryptor { pk, rho_prime, tau }
+    /// Create a new [Encryptor] using the given public key and $\tau$ parameter.
+    pub fn new(pk: Vec<Integer>, tau: u32, rho_prime: u16) -> Self {
+        let pk_size: usize = tau
+            .try_into()
+            .unwrap_or_else(|_| panic!("Param τ overflow!"));
+        let subset_sampler = SubsetSampler::new(pk_size);
+        let noise_sampler = NoiseSampler::new(rho_prime);
+        Self {
+            pk,
+            subset_sampler,
+            noise_sampler,
+        }
     }
 
-    /// Cipher a boolean value to get a fresh [Ciphertext].
-    pub fn encrypt(&self, val: bool) -> Ciphertext {
-        let subset_size = Randomizer::new().next_u32() % self.tau;
-        let r_bound: Integer = Integer::from(1) << (self.rho_prime as u32 + 1);
-        let mut r: Integer = Integer::from(0);
-        while r == 0 {
-            r = r_bound.random_below_ref(&mut new_rand_state()).complete()
-        }
-        r -= r_bound >> 1;
-        let subset = self.pk[1..]
-            .iter()
-            .choose_multiple(&mut Randomizer::new(), subset_size as usize);
-        let mut sum: Integer = subset.into_iter().sum();
-        sum *= 2;
-        r *= 2;
-        sum += r;
-        sum += val as u8;
-        let (_, sum) = sum.div_rem_round_ref(&self.pk[0]).complete();
-        Ciphertext::from(sum)
-    }
+    /// Encrypt a boolean value into a [Ciphertext].
+    pub fn encrypt(&mut self, data: bool) -> Ciphertext {
+        let subset = self.subset_sampler.sample_index_subset();
+        let noise = self.noise_sampler.sample_noise();
 
-    /// Get the memory footprint in bytes of the [Encryptor].
-    pub fn get_size(&self) -> usize {
-        let mut size = size_of_val(self);
-        for int in &self.pk {
-            size += int.capacity() / (u8::BITS as usize);
-            size += size_of::<Integer>();
+        let mut val = Integer::from(data);
+
+        val += noise * 2;
+        let mut sum = Integer::from(0);
+        for i in subset {
+            sum += &self.pk[i];
         }
-        size
+        val += sum * 2;
+
+        remainder(&val, &self.pk[0]).into()
     }
 }

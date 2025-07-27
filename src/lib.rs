@@ -1,1 +1,1 @@
-pub mod dghv;
+mod dghv;
