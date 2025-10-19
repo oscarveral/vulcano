@@ -1,21 +1,18 @@
 use super::*;
-use std::num::NonZeroUsize;
 
 #[derive(Debug, Clone)]
 struct TestGate {
-    arity: NonZeroUsize,
+    arity: usize,
 }
 
 impl TestGate {
     fn new(arity: usize) -> Self {
-        Self {
-            arity: NonZeroUsize::new(arity).expect("arity must be > 0"),
-        }
+        Self { arity }
     }
 }
 
 impl Gate for TestGate {
-    fn arity(&self) -> NonZeroUsize {
+    fn arity(&self) -> usize {
         self.arity
     }
 }

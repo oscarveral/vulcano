@@ -2,7 +2,7 @@
 mod tests;
 
 use smallvec::SmallVec;
-use std::{error::Error, fmt::Display, num::NonZeroUsize};
+use std::{error::Error, fmt::Display};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GateHandle(usize);
@@ -17,7 +17,7 @@ const _: () = assert!(EDGE_THRESHOLD > 0, "EDGE_THRESHOLD must be positive");
 const _: () = assert!(INITIAL_CAPACITY > 0, "INITIAL_CAPACITY must be positive");
 
 pub trait Gate {
-    fn arity(&self) -> NonZeroUsize;
+    fn arity(&self) -> usize;
 }
 
 enum Source {
@@ -39,11 +39,16 @@ pub enum CircuitError {
     NonExistentInput(InputHandle),
     NonExistentOutput(OutputHandle),
     TooManyConnections { gate: GateHandle, arity: usize },
+    TooLittleConnections { gate: GateHandle, arity: usize },
     SelfConnection(GateHandle),
     OutputAlreadyConnectedToGate(OutputHandle),
     GateAlreadyConnectedToOutput(GateHandle),
     UnusedInput(InputHandle),
     UnusedOutput(OutputHandle),
+    CycleDetected(GateHandle),
+    UnreachableGate(GateHandle),
+    DeadEndGate(GateHandle),
+    ZeroArityGate(GateHandle),
 }
 
 impl Error for CircuitError {}
@@ -57,6 +62,13 @@ impl Display for CircuitError {
             CircuitError::TooManyConnections { gate, arity } => {
                 write!(f, "Gate {:?} already has {} connections (max)", gate, arity)
             }
+            CircuitError::TooLittleConnections { gate, arity } => {
+                write!(
+                    f,
+                    "Gate {:?} has insufficient connections (expected {})",
+                    gate, arity
+                )
+            }
             CircuitError::SelfConnection(h) => write!(f, "Gate {:?} cannot connect to itself", h),
             CircuitError::OutputAlreadyConnectedToGate(h) => {
                 write!(f, "Output {:?} is already connected", h)
@@ -66,6 +78,16 @@ impl Display for CircuitError {
             }
             CircuitError::UnusedInput(h) => write!(f, "Input {:?} is unused", h),
             CircuitError::UnusedOutput(h) => write!(f, "Output {:?} is unused", h),
+            CircuitError::CycleDetected(h) => write!(f, "Cycle detected at gate {:?}", h),
+            CircuitError::UnreachableGate(h) => {
+                write!(f, "Gate {:?} is not reachable from any input", h)
+            }
+            CircuitError::DeadEndGate(h) => {
+                write!(f, "Gate {:?} does not lead to any output", h)
+            }
+            CircuitError::ZeroArityGate(h) => {
+                write!(f, "Gate {:?} has zero arity, which is not allowed", h)
+            }
         }
     }
 }
@@ -142,7 +164,7 @@ impl<T: Gate> Circuit<T> {
         if gate.0 >= self.gates.len() {
             return Err(CircuitError::NonExistentGate(gate));
         }
-        let gate_arity = self.gates[gate.0].arity().get();
+        let gate_arity = self.gates[gate.0].arity();
         if self.backward_edges[gate.0].len() >= gate_arity {
             return Err(CircuitError::TooManyConnections {
                 gate,
@@ -168,7 +190,7 @@ impl<T: Gate> Circuit<T> {
         if src_gate == dst_gate {
             return Err(CircuitError::SelfConnection(src_gate));
         }
-        let dst_arity = self.gates[dst_gate.0].arity().get();
+        let dst_arity = self.gates[dst_gate.0].arity();
         if self.backward_edges[dst_gate.0].len() >= dst_arity {
             return Err(CircuitError::TooManyConnections {
                 gate: dst_gate,
@@ -211,9 +233,121 @@ impl<T: Gate> Circuit<T> {
                 return Err(CircuitError::UnusedInput(InputHandle(i)));
             }
         }
+
         for (i, &connected) in self.connected_outputs.iter().enumerate() {
             if !connected {
                 return Err(CircuitError::UnusedOutput(OutputHandle(i)));
+            }
+        }
+
+        for (i, gate) in self.gates.iter().enumerate() {
+            if gate.arity() == 0 {
+                return Err(CircuitError::ZeroArityGate(GateHandle(i)));
+            }
+            if self.backward_edges[i].len() != gate.arity() {
+                return Err(CircuitError::TooLittleConnections {
+                    gate: GateHandle(i),
+                    arity: gate.arity(),
+                });
+            }
+        }
+
+        #[derive(Clone, Copy, PartialEq)]
+        enum VisitState {
+            Unvisited,
+            Visiting,
+            Visited,
+        }
+
+        let mut state = vec![VisitState::Unvisited; self.gates.len()];
+
+        for start_idx in 0..self.gates.len() {
+            if state[start_idx] != VisitState::Unvisited {
+                continue;
+            }
+
+            let mut stack = vec![start_idx];
+
+            while let Some(&gate_idx) = stack.last() {
+                match state[gate_idx] {
+                    VisitState::Visited => {
+                        stack.pop();
+                        continue;
+                    }
+                    VisitState::Visiting => {
+                        state[gate_idx] = VisitState::Visited;
+                        stack.pop();
+                        continue;
+                    }
+                    VisitState::Unvisited => {}
+                }
+
+                state[gate_idx] = VisitState::Visiting;
+
+                for source in &self.backward_edges[gate_idx] {
+                    if let Source::Gate(src_gate) = source {
+                        match state[src_gate.0] {
+                            VisitState::Visiting => {
+                                return Err(CircuitError::CycleDetected(GateHandle(src_gate.0)));
+                            }
+                            VisitState::Unvisited => {
+                                stack.push(src_gate.0);
+                            }
+                            VisitState::Visited => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut reachable_from_inputs = vec![false; self.gates.len()];
+        let mut queue = Vec::new();
+
+        for (gate_idx, edges) in self.backward_edges.iter().enumerate() {
+            if edges.iter().any(|s| matches!(s, Source::Input(_))) {
+                reachable_from_inputs[gate_idx] = true;
+                queue.push(gate_idx);
+            }
+        }
+
+        while let Some(gate_idx) = queue.pop() {
+            for dest in &self.forward_edges[gate_idx] {
+                if let Destination::Gate(dst_gate) = dest
+                    && !reachable_from_inputs[dst_gate.0]
+                {
+                    reachable_from_inputs[dst_gate.0] = true;
+                    queue.push(dst_gate.0);
+                }
+            }
+        }
+
+        let mut reachable_to_outputs = vec![false; self.gates.len()];
+        queue.clear();
+
+        for (gate_idx, edges) in self.forward_edges.iter().enumerate() {
+            if edges.iter().any(|d| matches!(d, Destination::Output(_))) {
+                reachable_to_outputs[gate_idx] = true;
+                queue.push(gate_idx);
+            }
+        }
+
+        while let Some(gate_idx) = queue.pop() {
+            for source in &self.backward_edges[gate_idx] {
+                if let Source::Gate(src_gate) = source
+                    && !reachable_to_outputs[src_gate.0]
+                {
+                    reachable_to_outputs[src_gate.0] = true;
+                    queue.push(src_gate.0);
+                }
+            }
+        }
+
+        for gate_idx in 0..self.gates.len() {
+            if !reachable_from_inputs[gate_idx] {
+                return Err(CircuitError::UnreachableGate(GateHandle(gate_idx)));
+            }
+            if !reachable_to_outputs[gate_idx] {
+                return Err(CircuitError::DeadEndGate(GateHandle(gate_idx)));
             }
         }
 
