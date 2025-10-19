@@ -42,6 +42,8 @@ pub enum CircuitError {
     SelfConnection(GateHandle),
     OutputAlreadyConnectedToGate(OutputHandle),
     GateAlreadyConnectedToOutput(GateHandle),
+    UnusedInput(InputHandle),
+    UnusedOutput(OutputHandle),
 }
 
 impl Error for CircuitError {}
@@ -62,6 +64,8 @@ impl Display for CircuitError {
             CircuitError::GateAlreadyConnectedToOutput(h) => {
                 write!(f, "Gate {:?} is already connected to an output", h)
             }
+            CircuitError::UnusedInput(h) => write!(f, "Input {:?} is unused", h),
+            CircuitError::UnusedOutput(h) => write!(f, "Output {:?} is unused", h),
         }
     }
 }
@@ -71,6 +75,7 @@ pub struct Circuit<T: Gate> {
     backward_edges: Vec<BackwardEdge>,
     forward_edges: Vec<ForwardEdge>,
     connected_outputs: Vec<bool>,
+    connected_inputs: Vec<bool>,
     input_count: usize,
     output_count: usize,
 }
@@ -85,7 +90,8 @@ impl<T: Gate> Circuit<T> {
             gates: Vec::with_capacity(capacity),
             backward_edges: Vec::with_capacity(capacity),
             forward_edges: Vec::with_capacity(capacity),
-            connected_outputs: Vec::with_capacity(capacity),
+            connected_outputs: Vec::with_capacity(0),
+            connected_inputs: Vec::with_capacity(0),
             input_count: 0,
             output_count: 0,
         }
@@ -114,6 +120,7 @@ impl<T: Gate> Circuit<T> {
     pub fn add_input(&mut self) -> InputHandle {
         let handle = self.input_count;
         self.input_count += 1;
+        self.connected_inputs.push(false);
         InputHandle(handle)
     }
 
@@ -143,6 +150,7 @@ impl<T: Gate> Circuit<T> {
             });
         }
         self.backward_edges[gate.0].push(Source::Input(input));
+        self.connected_inputs[input.0] = true;
         Ok(())
     }
 
@@ -194,6 +202,21 @@ impl<T: Gate> Circuit<T> {
         }
         self.forward_edges[gate.0].push(Destination::Output(output));
         self.connected_outputs[output.0] = true;
+        Ok(())
+    }
+
+    pub fn validate(&self) -> Result<(), CircuitError> {
+        for (i, &connected) in self.connected_inputs.iter().enumerate() {
+            if !connected {
+                return Err(CircuitError::UnusedInput(InputHandle(i)));
+            }
+        }
+        for (i, &connected) in self.connected_outputs.iter().enumerate() {
+            if !connected {
+                return Err(CircuitError::UnusedOutput(OutputHandle(i)));
+            }
+        }
+
         Ok(())
     }
 }
