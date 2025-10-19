@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use smallvec::SmallVec;
 use std::{error::Error, fmt::Display, num::NonZeroUsize};
 
