@@ -392,3 +392,340 @@ fn gate_can_connect_to_gates_and_output() {
     assert!(circuit.connect_gate_to_gate(gate1, gate2).is_ok());
     assert!(circuit.connect_gate_to_output(gate1, output).is_ok());
 }
+
+#[test]
+fn validate_simple_valid_circuit() {
+    let mut circuit = Circuit::new();
+    let input = circuit.add_input();
+    let gate = circuit.add_gate(TestGate::new(1));
+    let output = circuit.add_output();
+
+    circuit.connect_input_to_gate(input, gate).unwrap();
+    circuit.connect_gate_to_output(gate, output).unwrap();
+
+    assert!(circuit.validate().is_ok());
+}
+
+#[test]
+fn validate_unused_input() {
+    let mut circuit = Circuit::new();
+    let _input = circuit.add_input();
+    let gate = circuit.add_gate(TestGate::new(1));
+    let output = circuit.add_output();
+
+    let input2 = circuit.add_input();
+    circuit.connect_input_to_gate(input2, gate).unwrap();
+    circuit.connect_gate_to_output(gate, output).unwrap();
+
+    let result = circuit.validate();
+    assert_eq!(result, Err(CircuitError::UnusedInput(InputHandle(0))));
+}
+
+#[test]
+fn validate_unused_output() {
+    let mut circuit = Circuit::new();
+    let input1 = circuit.add_input();
+    let input2 = circuit.add_input();
+    let gate1 = circuit.add_gate(TestGate::new(1));
+    let gate2 = circuit.add_gate(TestGate::new(1));
+    let _output = circuit.add_output();
+
+    circuit.connect_input_to_gate(input1, gate1).unwrap();
+    circuit.connect_input_to_gate(input2, gate2).unwrap();
+
+    let output2 = circuit.add_output();
+    circuit.connect_gate_to_output(gate1, output2).unwrap();
+
+    let result = circuit.validate();
+    assert_eq!(result, Err(CircuitError::UnusedOutput(OutputHandle(0))));
+}
+
+#[test]
+fn validate_zero_arity_gate() {
+    let mut circuit = Circuit::new();
+    let input = circuit.add_input();
+    let gate1 = circuit.add_gate(TestGate::new(1));
+    let gate2 = circuit.add_gate(TestGate::new(0));
+    let output = circuit.add_output();
+
+    circuit.connect_input_to_gate(input, gate1).unwrap();
+    circuit.connect_gate_to_output(gate1, output).unwrap();
+
+    let result = circuit.validate();
+    assert_eq!(result, Err(CircuitError::ZeroArityGate(gate2)));
+}
+
+#[test]
+fn validate_too_little_connections() {
+    let mut circuit = Circuit::new();
+    let input = circuit.add_input();
+    let gate = circuit.add_gate(TestGate::new(2));
+    let output = circuit.add_output();
+
+    circuit.connect_input_to_gate(input, gate).unwrap();
+    circuit.connect_gate_to_output(gate, output).unwrap();
+
+    let result = circuit.validate();
+    assert_eq!(
+        result,
+        Err(CircuitError::TooLittleConnections { gate, arity: 2 })
+    );
+}
+
+#[test]
+fn validate_cycle_two_gates() {
+    let mut circuit = Circuit::new();
+    let input = circuit.add_input();
+    let gate1 = circuit.add_gate(TestGate::new(2));
+    let gate2 = circuit.add_gate(TestGate::new(1));
+    let output = circuit.add_output();
+
+    circuit.connect_input_to_gate(input, gate1).unwrap();
+    circuit.connect_gate_to_gate(gate1, gate2).unwrap();
+    circuit.connect_gate_to_gate(gate2, gate1).unwrap();
+    circuit.connect_gate_to_output(gate2, output).unwrap();
+
+    let result = circuit.validate();
+    assert!(matches!(result, Err(CircuitError::CycleDetected(_))));
+}
+
+#[test]
+fn validate_cycle_three_gates() {
+    let mut circuit = Circuit::new();
+    let input = circuit.add_input();
+    let gate1 = circuit.add_gate(TestGate::new(2));
+    let gate2 = circuit.add_gate(TestGate::new(1));
+    let gate3 = circuit.add_gate(TestGate::new(1));
+    let output = circuit.add_output();
+
+    circuit.connect_input_to_gate(input, gate1).unwrap();
+    circuit.connect_gate_to_gate(gate1, gate2).unwrap();
+    circuit.connect_gate_to_gate(gate2, gate3).unwrap();
+    circuit.connect_gate_to_gate(gate3, gate1).unwrap();
+    circuit.connect_gate_to_output(gate2, output).unwrap();
+
+    let result = circuit.validate();
+    assert!(matches!(result, Err(CircuitError::CycleDetected(_))));
+}
+
+#[test]
+fn validate_cycle_in_disconnected_subgraph() {
+    let mut circuit = Circuit::new();
+
+    let input1 = circuit.add_input();
+    let gate1 = circuit.add_gate(TestGate::new(1));
+    let output1 = circuit.add_output();
+    circuit.connect_input_to_gate(input1, gate1).unwrap();
+    circuit.connect_gate_to_output(gate1, output1).unwrap();
+
+    let gate2 = circuit.add_gate(TestGate::new(1));
+    let gate3 = circuit.add_gate(TestGate::new(1));
+    circuit.connect_gate_to_gate(gate2, gate3).unwrap();
+    circuit.connect_gate_to_gate(gate3, gate2).unwrap();
+
+    let result = circuit.validate();
+    assert!(matches!(result, Err(CircuitError::CycleDetected(_))));
+}
+
+#[test]
+fn validate_unreachable_gate_simple() {
+    let mut circuit = Circuit::new();
+    let input = circuit.add_input();
+    let gate1 = circuit.add_gate(TestGate::new(1));
+    let gate2 = circuit.add_gate(TestGate::new(2));
+    let gate3 = circuit.add_gate(TestGate::new(1));
+    let output1 = circuit.add_output();
+    let output2 = circuit.add_output();
+
+    circuit.connect_input_to_gate(input, gate1).unwrap();
+    circuit.connect_gate_to_output(gate1, output1).unwrap();
+
+    circuit.connect_gate_to_gate(gate3, gate2).unwrap();
+    circuit.connect_gate_to_gate(gate3, gate2).unwrap();
+
+    circuit.connect_gate_to_gate(gate2, gate3).unwrap();
+    circuit.connect_gate_to_output(gate2, output2).unwrap();
+
+    let result = circuit.validate();
+
+    assert!(matches!(
+        result,
+        Err(CircuitError::CycleDetected(_)) | Err(CircuitError::UnreachableGate(_))
+    ));
+}
+
+#[test]
+fn validate_dead_end_gate() {
+    let mut circuit = Circuit::new();
+    let input1 = circuit.add_input();
+    let input2 = circuit.add_input();
+    let gate1 = circuit.add_gate(TestGate::new(1));
+    let gate2 = circuit.add_gate(TestGate::new(1));
+    let output = circuit.add_output();
+
+    circuit.connect_input_to_gate(input1, gate1).unwrap();
+    circuit.connect_gate_to_output(gate1, output).unwrap();
+
+    circuit.connect_input_to_gate(input2, gate2).unwrap();
+
+    let result = circuit.validate();
+    assert_eq!(result, Err(CircuitError::DeadEndGate(gate2)));
+}
+
+#[test]
+fn validate_complex_valid_circuit() {
+    let mut circuit = Circuit::new();
+
+    let input1 = circuit.add_input();
+    let input2 = circuit.add_input();
+
+    let gate1 = circuit.add_gate(TestGate::new(1));
+    let gate2 = circuit.add_gate(TestGate::new(1));
+    let gate3 = circuit.add_gate(TestGate::new(2));
+
+    let output1 = circuit.add_output();
+    let output2 = circuit.add_output();
+
+    circuit.connect_input_to_gate(input1, gate1).unwrap();
+    circuit.connect_input_to_gate(input2, gate2).unwrap();
+    circuit.connect_gate_to_gate(gate1, gate3).unwrap();
+    circuit.connect_gate_to_gate(gate2, gate3).unwrap();
+    circuit.connect_gate_to_output(gate1, output1).unwrap();
+    circuit.connect_gate_to_output(gate3, output2).unwrap();
+
+    assert!(circuit.validate().is_ok());
+}
+
+#[test]
+fn validate_gate_with_multiple_forward_edges() {
+    let mut circuit = Circuit::new();
+    let input = circuit.add_input();
+    let gate1 = circuit.add_gate(TestGate::new(1));
+    let gate2 = circuit.add_gate(TestGate::new(1));
+    let gate3 = circuit.add_gate(TestGate::new(1));
+    let output1 = circuit.add_output();
+    let output2 = circuit.add_output();
+
+    circuit.connect_input_to_gate(input, gate1).unwrap();
+    circuit.connect_gate_to_gate(gate1, gate2).unwrap();
+    circuit.connect_gate_to_gate(gate1, gate3).unwrap();
+    circuit.connect_gate_to_output(gate2, output1).unwrap();
+    circuit.connect_gate_to_output(gate3, output2).unwrap();
+
+    assert!(circuit.validate().is_ok());
+}
+
+#[test]
+fn validate_dag_no_cycle() {
+    let mut circuit = Circuit::new();
+
+    let input = circuit.add_input();
+    let gate1 = circuit.add_gate(TestGate::new(1));
+    let gate2 = circuit.add_gate(TestGate::new(2));
+    let gate3 = circuit.add_gate(TestGate::new(1));
+    let output = circuit.add_output();
+
+    circuit.connect_input_to_gate(input, gate1).unwrap();
+    circuit.connect_gate_to_gate(gate1, gate2).unwrap();
+    circuit.connect_gate_to_gate(gate1, gate3).unwrap();
+    circuit.connect_gate_to_gate(gate3, gate2).unwrap();
+    circuit.connect_gate_to_output(gate2, output).unwrap();
+
+    assert!(circuit.validate().is_ok());
+}
+
+#[test]
+fn validate_multiple_inputs_to_same_gate() {
+    let mut circuit = Circuit::new();
+    let input1 = circuit.add_input();
+    let input2 = circuit.add_input();
+    let gate = circuit.add_gate(TestGate::new(2));
+    let output = circuit.add_output();
+
+    circuit.connect_input_to_gate(input1, gate).unwrap();
+    circuit.connect_input_to_gate(input2, gate).unwrap();
+    circuit.connect_gate_to_output(gate, output).unwrap();
+
+    assert!(circuit.validate().is_ok());
+}
+
+#[test]
+fn validate_mixed_input_and_gate_connections() {
+    let mut circuit = Circuit::new();
+    let input = circuit.add_input();
+    let gate1 = circuit.add_gate(TestGate::new(1));
+    let gate2 = circuit.add_gate(TestGate::new(2));
+    let output = circuit.add_output();
+
+    circuit.connect_input_to_gate(input, gate1).unwrap();
+    circuit.connect_gate_to_gate(gate1, gate2).unwrap();
+    circuit.connect_input_to_gate(input, gate2).unwrap();
+    circuit.connect_gate_to_output(gate2, output).unwrap();
+
+    assert!(circuit.validate().is_ok());
+}
+
+#[test]
+fn validate_large_valid_circuit() {
+    let mut circuit = Circuit::new();
+
+    let inputs: Vec<_> = (0..10).map(|_| circuit.add_input()).collect();
+    let gates: Vec<_> = (0..10)
+        .map(|_| circuit.add_gate(TestGate::new(1)))
+        .collect();
+    let outputs: Vec<_> = (0..10).map(|_| circuit.add_output()).collect();
+
+    for (input, gate) in inputs.iter().zip(gates.iter()) {
+        circuit.connect_input_to_gate(*input, *gate).unwrap();
+    }
+
+    for (gate, output) in gates.iter().zip(outputs.iter()) {
+        circuit.connect_gate_to_output(*gate, *output).unwrap();
+    }
+
+    assert!(circuit.validate().is_ok());
+}
+
+#[test]
+fn validate_cycle_after_valid_path() {
+    let mut circuit = Circuit::new();
+    let input1 = circuit.add_input();
+    let input2 = circuit.add_input();
+    let gate1 = circuit.add_gate(TestGate::new(2));
+    let gate2 = circuit.add_gate(TestGate::new(2));
+    let output = circuit.add_output();
+
+    circuit.connect_input_to_gate(input1, gate1).unwrap();
+    circuit.connect_input_to_gate(input2, gate2).unwrap();
+    circuit.connect_gate_to_gate(gate1, gate2).unwrap();
+    circuit.connect_gate_to_gate(gate2, gate1).unwrap(); // Creates cycle
+    circuit.connect_gate_to_output(gate2, output).unwrap();
+
+    let result = circuit.validate();
+    assert!(matches!(result, Err(CircuitError::CycleDetected(_))));
+}
+
+#[test]
+fn validate_empty_circuit_passes() {
+    let circuit: Circuit<TestGate> = Circuit::new();
+
+    assert!(circuit.validate().is_ok());
+}
+
+#[test]
+fn validate_partial_connectivity() {
+    let mut circuit = Circuit::new();
+
+    let input1 = circuit.add_input();
+    let gate1 = circuit.add_gate(TestGate::new(1));
+    let output1 = circuit.add_output();
+    circuit.connect_input_to_gate(input1, gate1).unwrap();
+    circuit.connect_gate_to_output(gate1, output1).unwrap();
+
+    let input2 = circuit.add_input();
+    let gate2 = circuit.add_gate(TestGate::new(1));
+    circuit.connect_input_to_gate(input2, gate2).unwrap();
+
+    let result = circuit.validate();
+    assert_eq!(result, Err(CircuitError::DeadEndGate(gate2)));
+}
