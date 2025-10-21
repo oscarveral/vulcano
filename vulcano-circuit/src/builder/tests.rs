@@ -1,4 +1,4 @@
-use crate::{Builder, CircuitError, Gate, GateHandle, InputHandle, OutputHandle};
+use crate::{Builder, Error, Gate, GateHandle, InputHandle, OutputHandle};
 
 #[derive(Debug, Clone)]
 struct TestGate {
@@ -83,7 +83,7 @@ fn connect_input_to_nonexistent_gate() {
     let nonexistent_gate = GateHandle(99);
 
     let result = circuit.connect_input_to_gate(input, nonexistent_gate);
-    assert_eq!(result, Err(CircuitError::NonExistentGate(nonexistent_gate)));
+    assert_eq!(result, Err(Error::NonExistentGate(nonexistent_gate)));
 }
 
 #[test]
@@ -93,10 +93,7 @@ fn connect_nonexistent_input_to_gate() {
     let nonexistent_input = InputHandle(99);
 
     let result = circuit.connect_input_to_gate(nonexistent_input, gate);
-    assert_eq!(
-        result,
-        Err(CircuitError::NonExistentInput(nonexistent_input))
-    );
+    assert_eq!(result, Err(Error::NonExistentInput(nonexistent_input)));
 }
 
 #[test]
@@ -111,10 +108,7 @@ fn connect_too_many_inputs_to_gate() {
     assert!(circuit.connect_input_to_gate(input2, gate).is_ok());
 
     let result = circuit.connect_input_to_gate(input3, gate);
-    assert_eq!(
-        result,
-        Err(CircuitError::TooManyConnections { gate, arity: 2 })
-    );
+    assert_eq!(result, Err(Error::TooManyConnections { gate, arity: 2 }));
 }
 
 #[test]
@@ -134,16 +128,10 @@ fn connect_gate_to_nonexistent_gate() {
     let nonexistent_gate = GateHandle(99);
 
     let result1 = circuit.connect_gate_to_gate(nonexistent_gate, gate);
-    assert_eq!(
-        result1,
-        Err(CircuitError::NonExistentGate(nonexistent_gate))
-    );
+    assert_eq!(result1, Err(Error::NonExistentGate(nonexistent_gate)));
 
     let result2 = circuit.connect_gate_to_gate(gate, nonexistent_gate);
-    assert_eq!(
-        result2,
-        Err(CircuitError::NonExistentGate(nonexistent_gate))
-    );
+    assert_eq!(result2, Err(Error::NonExistentGate(nonexistent_gate)));
 }
 
 #[test]
@@ -152,7 +140,7 @@ fn connect_gate_to_itself() {
     let gate = circuit.add_gate(TestGate::new(2));
 
     let result = circuit.connect_gate_to_gate(gate, gate);
-    assert_eq!(result, Err(CircuitError::SelfConnection(gate)));
+    assert_eq!(result, Err(Error::SelfConnection(gate)));
 }
 
 #[test]
@@ -169,7 +157,7 @@ fn connect_too_many_gates_to_gate() {
     let result = circuit.connect_gate_to_gate(gate3, target_gate);
     assert_eq!(
         result,
-        Err(CircuitError::TooManyConnections {
+        Err(Error::TooManyConnections {
             gate: target_gate,
             arity: 2
         })
@@ -193,10 +181,7 @@ fn connect_gate_to_nonexistent_output() {
     let nonexistent_output = OutputHandle(99);
 
     let result = circuit.connect_gate_to_output(gate, nonexistent_output);
-    assert_eq!(
-        result,
-        Err(CircuitError::NonExistentOutput(nonexistent_output))
-    );
+    assert_eq!(result, Err(Error::NonExistentOutput(nonexistent_output)));
 }
 
 #[test]
@@ -206,7 +191,7 @@ fn connect_nonexistent_gate_to_output() {
     let nonexistent_gate = GateHandle(99);
 
     let result = circuit.connect_gate_to_output(nonexistent_gate, output);
-    assert_eq!(result, Err(CircuitError::NonExistentGate(nonexistent_gate)));
+    assert_eq!(result, Err(Error::NonExistentGate(nonexistent_gate)));
 }
 
 #[test]
@@ -219,10 +204,7 @@ fn output_already_connected() {
     assert!(circuit.connect_gate_to_output(gate1, output).is_ok());
 
     let result = circuit.connect_gate_to_output(gate2, output);
-    assert_eq!(
-        result,
-        Err(CircuitError::OutputAlreadyConnectedToGate(output))
-    );
+    assert_eq!(result, Err(Error::OutputAlreadyConnectedToGate(output)));
 }
 
 #[test]
@@ -235,10 +217,7 @@ fn gate_cannot_connect_to_multiple_outputs() {
     assert!(circuit.connect_gate_to_output(gate, output1).is_ok());
 
     let result = circuit.connect_gate_to_output(gate, output2);
-    assert_eq!(
-        result,
-        Err(CircuitError::GateAlreadyConnectedToOutput(gate))
-    );
+    assert_eq!(result, Err(Error::GateAlreadyConnectedToOutput(gate)));
 }
 
 #[test]
@@ -297,37 +276,37 @@ fn circuit_error_display() {
     let output = OutputHandle(7);
 
     assert_eq!(
-        format!("{}", CircuitError::NonExistentGate(gate)),
+        format!("{}", Error::NonExistentGate(gate)),
         "Gate GateHandle(5) does not exist"
     );
 
     assert_eq!(
-        format!("{}", CircuitError::NonExistentInput(input)),
+        format!("{}", Error::NonExistentInput(input)),
         "Input InputHandle(3) does not exist"
     );
 
     assert_eq!(
-        format!("{}", CircuitError::NonExistentOutput(output)),
+        format!("{}", Error::NonExistentOutput(output)),
         "Output OutputHandle(7) does not exist"
     );
 
     assert_eq!(
-        format!("{}", CircuitError::TooManyConnections { gate, arity: 2 }),
+        format!("{}", Error::TooManyConnections { gate, arity: 2 }),
         "Gate GateHandle(5) already has 2 connections (max)"
     );
 
     assert_eq!(
-        format!("{}", CircuitError::SelfConnection(gate)),
+        format!("{}", Error::SelfConnection(gate)),
         "Gate GateHandle(5) cannot connect to itself"
     );
 
     assert_eq!(
-        format!("{}", CircuitError::OutputAlreadyConnectedToGate(output)),
+        format!("{}", Error::OutputAlreadyConnectedToGate(output)),
         "Output OutputHandle(7) is already connected"
     );
 
     assert_eq!(
-        format!("{}", CircuitError::GateAlreadyConnectedToOutput(gate)),
+        format!("{}", Error::GateAlreadyConnectedToOutput(gate)),
         "Gate GateHandle(5) is already connected to an output"
     );
 }
@@ -342,10 +321,7 @@ fn gate_with_arity_one() {
 
     let input2 = circuit.add_input();
     let result = circuit.connect_input_to_gate(input2, gate);
-    assert_eq!(
-        result,
-        Err(CircuitError::TooManyConnections { gate, arity: 1 })
-    );
+    assert_eq!(result, Err(Error::TooManyConnections { gate, arity: 1 }));
 }
 
 #[test]
@@ -418,7 +394,7 @@ fn validate_unused_input() {
     circuit.connect_gate_to_output(gate, output).unwrap();
 
     let result = circuit.validate();
-    assert_eq!(result, Err(CircuitError::UnusedInput(InputHandle(0))));
+    assert_eq!(result, Err(Error::UnusedInput(InputHandle(0))));
 }
 
 #[test]
@@ -437,7 +413,7 @@ fn validate_unused_output() {
     circuit.connect_gate_to_output(gate1, output2).unwrap();
 
     let result = circuit.validate();
-    assert_eq!(result, Err(CircuitError::UnusedOutput(OutputHandle(0))));
+    assert_eq!(result, Err(Error::UnusedOutput(OutputHandle(0))));
 }
 
 #[test]
@@ -452,7 +428,7 @@ fn validate_zero_arity_gate() {
     circuit.connect_gate_to_output(gate1, output).unwrap();
 
     let result = circuit.validate();
-    assert_eq!(result, Err(CircuitError::ZeroArityGate(gate2)));
+    assert_eq!(result, Err(Error::ZeroArityGate(gate2)));
 }
 
 #[test]
@@ -466,10 +442,7 @@ fn validate_too_little_connections() {
     circuit.connect_gate_to_output(gate, output).unwrap();
 
     let result = circuit.validate();
-    assert_eq!(
-        result,
-        Err(CircuitError::TooLittleConnections { gate, arity: 2 })
-    );
+    assert_eq!(result, Err(Error::TooLittleConnections { gate, arity: 2 }));
 }
 
 #[test]
@@ -486,7 +459,7 @@ fn validate_cycle_two_gates() {
     circuit.connect_gate_to_output(gate2, output).unwrap();
 
     let result = circuit.validate();
-    assert!(matches!(result, Err(CircuitError::CycleDetected(_))));
+    assert!(matches!(result, Err(Error::CycleDetected(_))));
 }
 
 #[test]
@@ -505,7 +478,7 @@ fn validate_cycle_three_gates() {
     circuit.connect_gate_to_output(gate2, output).unwrap();
 
     let result = circuit.validate();
-    assert!(matches!(result, Err(CircuitError::CycleDetected(_))));
+    assert!(matches!(result, Err(Error::CycleDetected(_))));
 }
 
 #[test]
@@ -524,7 +497,7 @@ fn validate_cycle_in_disconnected_subgraph() {
     circuit.connect_gate_to_gate(gate3, gate2).unwrap();
 
     let result = circuit.validate();
-    assert!(matches!(result, Err(CircuitError::CycleDetected(_))));
+    assert!(matches!(result, Err(Error::CycleDetected(_))));
 }
 
 #[test]
@@ -550,7 +523,7 @@ fn validate_unreachable_gate_simple() {
 
     assert!(matches!(
         result,
-        Err(CircuitError::CycleDetected(_)) | Err(CircuitError::UnreachableGate(_))
+        Err(Error::CycleDetected(_)) | Err(Error::UnreachableGate(_))
     ));
 }
 
@@ -569,7 +542,7 @@ fn validate_dead_end_gate() {
     circuit.connect_input_to_gate(input2, gate2).unwrap();
 
     let result = circuit.validate();
-    assert_eq!(result, Err(CircuitError::DeadEndGate(gate2)));
+    assert_eq!(result, Err(Error::DeadEndGate(gate2)));
 }
 
 #[test]
@@ -702,7 +675,7 @@ fn validate_cycle_after_valid_path() {
     circuit.connect_gate_to_output(gate2, output).unwrap();
 
     let result = circuit.validate();
-    assert!(matches!(result, Err(CircuitError::CycleDetected(_))));
+    assert!(matches!(result, Err(Error::CycleDetected(_))));
 }
 
 #[test]
@@ -727,5 +700,5 @@ fn validate_partial_connectivity() {
     circuit.connect_input_to_gate(input2, gate2).unwrap();
 
     let result = circuit.validate();
-    assert_eq!(result, Err(CircuitError::DeadEndGate(gate2)));
+    assert_eq!(result, Err(Error::DeadEndGate(gate2)));
 }

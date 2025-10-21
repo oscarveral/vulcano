@@ -4,6 +4,6 @@ mod gate;
 mod handles;
 
 pub use builder::Builder;
-pub use error::CircuitError;
+pub use error::Error;
 pub use gate::Gate;
 pub use handles::{GateHandle, InputHandle, OutputHandle};

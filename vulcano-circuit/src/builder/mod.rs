@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::{CircuitError, Gate, GateHandle, InputHandle, OutputHandle};
+use crate::{Error, Gate, GateHandle, InputHandle, OutputHandle};
 use smallvec::SmallVec;
 
 const EDGE_THRESHOLD: usize = 4;
@@ -81,16 +81,16 @@ impl<T: Gate> Builder<T> {
         &mut self,
         input: InputHandle,
         gate: GateHandle,
-    ) -> Result<(), CircuitError> {
+    ) -> Result<(), Error> {
         if input.0 >= self.connected_inputs.len() {
-            return Err(CircuitError::NonExistentInput(input));
+            return Err(Error::NonExistentInput(input));
         }
         if gate.0 >= self.gates.len() {
-            return Err(CircuitError::NonExistentGate(gate));
+            return Err(Error::NonExistentGate(gate));
         }
         let gate_arity = self.gates[gate.0].arity();
         if self.backward_edges[gate.0].len() >= gate_arity {
-            return Err(CircuitError::TooManyConnections {
+            return Err(Error::TooManyConnections {
                 gate,
                 arity: gate_arity,
             });
@@ -104,19 +104,19 @@ impl<T: Gate> Builder<T> {
         &mut self,
         src_gate: GateHandle,
         dst_gate: GateHandle,
-    ) -> Result<(), CircuitError> {
+    ) -> Result<(), Error> {
         if src_gate.0 >= self.gates.len() {
-            return Err(CircuitError::NonExistentGate(src_gate));
+            return Err(Error::NonExistentGate(src_gate));
         }
         if dst_gate.0 >= self.gates.len() {
-            return Err(CircuitError::NonExistentGate(dst_gate));
+            return Err(Error::NonExistentGate(dst_gate));
         }
         if src_gate == dst_gate {
-            return Err(CircuitError::SelfConnection(src_gate));
+            return Err(Error::SelfConnection(src_gate));
         }
         let dst_arity = self.gates[dst_gate.0].arity();
         if self.backward_edges[dst_gate.0].len() >= dst_arity {
-            return Err(CircuitError::TooManyConnections {
+            return Err(Error::TooManyConnections {
                 gate: dst_gate,
                 arity: dst_arity,
             });
@@ -130,46 +130,46 @@ impl<T: Gate> Builder<T> {
         &mut self,
         gate: GateHandle,
         output: OutputHandle,
-    ) -> Result<(), CircuitError> {
+    ) -> Result<(), Error> {
         if gate.0 >= self.gates.len() {
-            return Err(CircuitError::NonExistentGate(gate));
+            return Err(Error::NonExistentGate(gate));
         }
         if output.0 >= self.connected_outputs.len() {
-            return Err(CircuitError::NonExistentOutput(output));
+            return Err(Error::NonExistentOutput(output));
         }
         if self.connected_outputs[output.0] {
-            return Err(CircuitError::OutputAlreadyConnectedToGate(output));
+            return Err(Error::OutputAlreadyConnectedToGate(output));
         }
         if self.forward_edges[gate.0]
             .iter()
             .any(|d| matches!(d, Destination::Output(_)))
         {
-            return Err(CircuitError::GateAlreadyConnectedToOutput(gate));
+            return Err(Error::GateAlreadyConnectedToOutput(gate));
         }
         self.forward_edges[gate.0].push(Destination::Output(output));
         self.connected_outputs[output.0] = true;
         Ok(())
     }
 
-    pub fn validate(&self) -> Result<(), CircuitError> {
+    pub fn validate(&self) -> Result<(), Error> {
         for (i, &connected) in self.connected_inputs.iter().enumerate() {
             if !connected {
-                return Err(CircuitError::UnusedInput(InputHandle(i)));
+                return Err(Error::UnusedInput(InputHandle(i)));
             }
         }
 
         for (i, &connected) in self.connected_outputs.iter().enumerate() {
             if !connected {
-                return Err(CircuitError::UnusedOutput(OutputHandle(i)));
+                return Err(Error::UnusedOutput(OutputHandle(i)));
             }
         }
 
         for (i, gate) in self.gates.iter().enumerate() {
             if gate.arity() == 0 {
-                return Err(CircuitError::ZeroArityGate(GateHandle(i)));
+                return Err(Error::ZeroArityGate(GateHandle(i)));
             }
             if self.backward_edges[i].len() != gate.arity() {
-                return Err(CircuitError::TooLittleConnections {
+                return Err(Error::TooLittleConnections {
                     gate: GateHandle(i),
                     arity: gate.arity(),
                 });
@@ -212,7 +212,7 @@ impl<T: Gate> Builder<T> {
                     if let Source::Gate(src_gate) = source {
                         match state[src_gate.0] {
                             VisitState::Visiting => {
-                                return Err(CircuitError::CycleDetected(GateHandle(src_gate.0)));
+                                return Err(Error::CycleDetected(GateHandle(src_gate.0)));
                             }
                             VisitState::Unvisited => {
                                 stack.push(src_gate.0);
@@ -268,10 +268,10 @@ impl<T: Gate> Builder<T> {
 
         for gate_idx in 0..self.gates.len() {
             if !reachable_from_inputs[gate_idx] {
-                return Err(CircuitError::UnreachableGate(GateHandle(gate_idx)));
+                return Err(Error::UnreachableGate(GateHandle(gate_idx)));
             }
             if !reachable_to_outputs[gate_idx] {
-                return Err(CircuitError::DeadEndGate(GateHandle(gate_idx)));
+                return Err(Error::DeadEndGate(GateHandle(gate_idx)));
             }
         }
 
