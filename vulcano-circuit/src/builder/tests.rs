@@ -328,7 +328,7 @@ fn gate_can_connect_to_gates_and_output() {
 }
 
 #[test]
-fn validate_simple_valid_builder() {
+fn build_simple_valid_builder() {
     let mut builder = Builder::new();
     let input = builder.add_input();
     let gate = builder.add_gate(TestGate::new(1));
@@ -337,11 +337,11 @@ fn validate_simple_valid_builder() {
     builder.connect_input_to_gate(input, gate).unwrap();
     builder.connect_gate_to_output(gate, output).unwrap();
 
-    assert!(builder.validate().is_ok());
+    assert!(builder.build().is_ok());
 }
 
 #[test]
-fn validate_unused_input() {
+fn build_unused_input() {
     let mut builder = Builder::new();
     let _input = builder.add_input();
     let gate = builder.add_gate(TestGate::new(1));
@@ -351,12 +351,12 @@ fn validate_unused_input() {
     builder.connect_input_to_gate(input2, gate).unwrap();
     builder.connect_gate_to_output(gate, output).unwrap();
 
-    let result = builder.validate();
+    let result = builder.build();
     assert_eq!(result, Err(Error::UnusedInput(InputHandle(0))));
 }
 
 #[test]
-fn validate_unused_output() {
+fn build_unused_output() {
     let mut builder = Builder::new();
     let input1 = builder.add_input();
     let input2 = builder.add_input();
@@ -370,12 +370,12 @@ fn validate_unused_output() {
     let output2 = builder.add_output();
     builder.connect_gate_to_output(gate1, output2).unwrap();
 
-    let result = builder.validate();
+    let result = builder.build();
     assert_eq!(result, Err(Error::UnusedOutput(OutputHandle(0))));
 }
 
 #[test]
-fn validate_zero_arity_gate() {
+fn build_zero_arity_gate() {
     let mut builder = Builder::new();
     let input = builder.add_input();
     let gate1 = builder.add_gate(TestGate::new(1));
@@ -385,12 +385,12 @@ fn validate_zero_arity_gate() {
     builder.connect_input_to_gate(input, gate1).unwrap();
     builder.connect_gate_to_output(gate1, output).unwrap();
 
-    let result = builder.validate();
+    let result = builder.build();
     assert_eq!(result, Err(Error::ZeroArityGate(gate2)));
 }
 
 #[test]
-fn validate_too_little_connections() {
+fn build_too_little_connections() {
     let mut builder = Builder::new();
     let input = builder.add_input();
     let gate = builder.add_gate(TestGate::new(2));
@@ -399,12 +399,12 @@ fn validate_too_little_connections() {
     builder.connect_input_to_gate(input, gate).unwrap();
     builder.connect_gate_to_output(gate, output).unwrap();
 
-    let result = builder.validate();
+    let result = builder.build();
     assert_eq!(result, Err(Error::TooLittleConnections { gate, arity: 2 }));
 }
 
 #[test]
-fn validate_cycle_two_gates() {
+fn build_cycle_two_gates() {
     let mut builder = Builder::new();
     let input = builder.add_input();
     let gate1 = builder.add_gate(TestGate::new(2));
@@ -416,12 +416,12 @@ fn validate_cycle_two_gates() {
     builder.connect_gate_to_gate(gate2, gate1).unwrap();
     builder.connect_gate_to_output(gate2, output).unwrap();
 
-    let result = builder.validate();
+    let result = builder.build();
     assert!(matches!(result, Err(Error::CycleDetected(_))));
 }
 
 #[test]
-fn validate_cycle_three_gates() {
+fn build_cycle_three_gates() {
     let mut builder = Builder::new();
     let input = builder.add_input();
     let gate1 = builder.add_gate(TestGate::new(2));
@@ -435,12 +435,12 @@ fn validate_cycle_three_gates() {
     builder.connect_gate_to_gate(gate3, gate1).unwrap();
     builder.connect_gate_to_output(gate2, output).unwrap();
 
-    let result = builder.validate();
+    let result = builder.build();
     assert!(matches!(result, Err(Error::CycleDetected(_))));
 }
 
 #[test]
-fn validate_cycle_in_disconnected_subgraph() {
+fn build_cycle_in_disconnected_subgraph() {
     let mut builder = Builder::new();
 
     let input1 = builder.add_input();
@@ -454,12 +454,12 @@ fn validate_cycle_in_disconnected_subgraph() {
     builder.connect_gate_to_gate(gate2, gate3).unwrap();
     builder.connect_gate_to_gate(gate3, gate2).unwrap();
 
-    let result = builder.validate();
+    let result = builder.build();
     assert!(matches!(result, Err(Error::CycleDetected(_))));
 }
 
 #[test]
-fn validate_unreachable_gate_simple() {
+fn build_unreachable_gate_simple() {
     let mut builder = Builder::new();
     let input = builder.add_input();
     let gate1 = builder.add_gate(TestGate::new(1));
@@ -477,7 +477,7 @@ fn validate_unreachable_gate_simple() {
     builder.connect_gate_to_gate(gate2, gate3).unwrap();
     builder.connect_gate_to_output(gate2, output2).unwrap();
 
-    let result = builder.validate();
+    let result = builder.build();
 
     assert!(matches!(
         result,
@@ -486,7 +486,7 @@ fn validate_unreachable_gate_simple() {
 }
 
 #[test]
-fn validate_dead_end_gate() {
+fn build_dead_end_gate() {
     let mut builder = Builder::new();
     let input1 = builder.add_input();
     let input2 = builder.add_input();
@@ -499,12 +499,12 @@ fn validate_dead_end_gate() {
 
     builder.connect_input_to_gate(input2, gate2).unwrap();
 
-    let result = builder.validate();
+    let result = builder.build();
     assert_eq!(result, Err(Error::DeadEndGate(gate2)));
 }
 
 #[test]
-fn validate_complex_valid_builder() {
+fn build_complex_valid_builder() {
     let mut builder = Builder::new();
 
     let input1 = builder.add_input();
@@ -524,11 +524,11 @@ fn validate_complex_valid_builder() {
     builder.connect_gate_to_output(gate1, output1).unwrap();
     builder.connect_gate_to_output(gate3, output2).unwrap();
 
-    assert!(builder.validate().is_ok());
+    assert!(builder.build().is_ok());
 }
 
 #[test]
-fn validate_gate_with_multiple_forward_edges() {
+fn build_gate_with_multiple_forward_edges() {
     let mut builder = Builder::new();
     let input = builder.add_input();
     let gate1 = builder.add_gate(TestGate::new(1));
@@ -543,11 +543,11 @@ fn validate_gate_with_multiple_forward_edges() {
     builder.connect_gate_to_output(gate2, output1).unwrap();
     builder.connect_gate_to_output(gate3, output2).unwrap();
 
-    assert!(builder.validate().is_ok());
+    assert!(builder.build().is_ok());
 }
 
 #[test]
-fn validate_dag_no_cycle() {
+fn build_dag_no_cycle() {
     let mut builder = Builder::new();
 
     let input = builder.add_input();
@@ -562,11 +562,11 @@ fn validate_dag_no_cycle() {
     builder.connect_gate_to_gate(gate3, gate2).unwrap();
     builder.connect_gate_to_output(gate2, output).unwrap();
 
-    assert!(builder.validate().is_ok());
+    assert!(builder.build().is_ok());
 }
 
 #[test]
-fn validate_multiple_inputs_to_same_gate() {
+fn build_multiple_inputs_to_same_gate() {
     let mut builder = Builder::new();
     let input1 = builder.add_input();
     let input2 = builder.add_input();
@@ -577,11 +577,11 @@ fn validate_multiple_inputs_to_same_gate() {
     builder.connect_input_to_gate(input2, gate).unwrap();
     builder.connect_gate_to_output(gate, output).unwrap();
 
-    assert!(builder.validate().is_ok());
+    assert!(builder.build().is_ok());
 }
 
 #[test]
-fn validate_mixed_input_and_gate_connections() {
+fn build_mixed_input_and_gate_connections() {
     let mut builder = Builder::new();
     let input = builder.add_input();
     let gate1 = builder.add_gate(TestGate::new(1));
@@ -593,11 +593,11 @@ fn validate_mixed_input_and_gate_connections() {
     builder.connect_input_to_gate(input, gate2).unwrap();
     builder.connect_gate_to_output(gate2, output).unwrap();
 
-    assert!(builder.validate().is_ok());
+    assert!(builder.build().is_ok());
 }
 
 #[test]
-fn validate_large_valid_builder() {
+fn build_large_valid_builder() {
     let mut builder = Builder::new();
 
     let inputs: Vec<_> = (0..10).map(|_| builder.add_input()).collect();
@@ -614,11 +614,11 @@ fn validate_large_valid_builder() {
         builder.connect_gate_to_output(*gate, *output).unwrap();
     }
 
-    assert!(builder.validate().is_ok());
+    assert!(builder.build().is_ok());
 }
 
 #[test]
-fn validate_cycle_after_valid_path() {
+fn build_cycle_after_valid_path() {
     let mut builder = Builder::new();
     let input1 = builder.add_input();
     let input2 = builder.add_input();
@@ -632,19 +632,19 @@ fn validate_cycle_after_valid_path() {
     builder.connect_gate_to_gate(gate2, gate1).unwrap(); // Creates cycle
     builder.connect_gate_to_output(gate2, output).unwrap();
 
-    let result = builder.validate();
+    let result = builder.build();
     assert!(matches!(result, Err(Error::CycleDetected(_))));
 }
 
 #[test]
-fn validate_empty_builder_passes() {
+fn build_empty_builder_passes() {
     let builder: Builder<TestGate> = Builder::new();
 
-    assert!(builder.validate().is_ok());
+    assert!(builder.build().is_ok());
 }
 
 #[test]
-fn validate_partial_connectivity() {
+fn build_partial_connectivity() {
     let mut builder = Builder::new();
 
     let input1 = builder.add_input();
@@ -657,6 +657,6 @@ fn validate_partial_connectivity() {
     let gate2 = builder.add_gate(TestGate::new(1));
     builder.connect_input_to_gate(input2, gate2).unwrap();
 
-    let result = builder.validate();
+    let result = builder.build();
     assert_eq!(result, Err(Error::DeadEndGate(gate2)));
 }

@@ -17,6 +17,7 @@ pub enum Error {
     UnreachableGate(GateHandle),
     DeadEndGate(GateHandle),
     ZeroArityGate(GateHandle),
+    AnomalyOnCycleCheck(GateHandle),
 }
 
 impl StdErr for Error {}
@@ -55,6 +56,9 @@ impl Display for Error {
             }
             Error::ZeroArityGate(h) => {
                 write!(f, "Gate {:?} has zero arity, which is not allowed", h)
+            }
+            Error::AnomalyOnCycleCheck(h) => {
+                write!(f, "Anomaly detected during cycle check at gate {:?}", h)
             }
         }
     }

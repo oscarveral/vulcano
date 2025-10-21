@@ -152,7 +152,7 @@ impl<T: Gate> Builder<T> {
         Ok(())
     }
 
-    pub fn validate(&self) -> Result<(), Error> {
+    pub fn build(&self) -> Result<(), Error> {
         for (i, &connected) in self.connected_inputs.iter().enumerate() {
             if !connected {
                 return Err(Error::UnusedInput(InputHandle(i)));
@@ -196,8 +196,7 @@ impl<T: Gate> Builder<T> {
             while let Some(&gate_idx) = stack.last() {
                 match state[gate_idx] {
                     VisitState::Visited => {
-                        stack.pop();
-                        continue;
+                        return Err(Error::AnomalyOnCycleCheck(GateHandle(gate_idx)));
                     }
                     VisitState::Visiting => {
                         state[gate_idx] = VisitState::Visited;
