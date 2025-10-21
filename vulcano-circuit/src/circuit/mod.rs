@@ -1,11 +1,7 @@
-mod error;
-mod gate;
-mod handles;
+#[cfg(test)]
+mod tests;
 
-pub use error::CircuitError;
-pub use gate::Gate;
-pub use handles::{GateHandle, InputHandle, OutputHandle};
-
+use crate::{CircuitError, Gate, GateHandle, InputHandle, OutputHandle};
 use smallvec::SmallVec;
 
 const EDGE_THRESHOLD: usize = 4;

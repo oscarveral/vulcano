@@ -1,4 +1,4 @@
-use super::*;
+use crate::{Circuit, CircuitError, Gate, GateHandle, InputHandle, OutputHandle};
 
 #[derive(Debug, Clone)]
 struct TestGate {
