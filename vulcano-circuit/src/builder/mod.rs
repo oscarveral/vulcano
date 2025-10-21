@@ -22,7 +22,7 @@ enum Destination {
 type BackwardEdge = SmallVec<Source, EDGE_THRESHOLD>;
 type ForwardEdge = SmallVec<Destination, EDGE_THRESHOLD>;
 
-pub struct Circuit<T: Gate> {
+pub struct Builder<T: Gate> {
     gates: Vec<T>,
     backward_edges: Vec<BackwardEdge>,
     forward_edges: Vec<ForwardEdge>,
@@ -30,7 +30,7 @@ pub struct Circuit<T: Gate> {
     connected_inputs: Vec<bool>,
 }
 
-impl<T: Gate> Circuit<T> {
+impl<T: Gate> Builder<T> {
     pub fn new() -> Self {
         Self::with_capacity(INITIAL_CAPACITY)
     }
@@ -279,7 +279,7 @@ impl<T: Gate> Circuit<T> {
     }
 }
 
-impl<T: Gate> Default for Circuit<T> {
+impl<T: Gate> Default for Builder<T> {
     fn default() -> Self {
         Self::new()
     }

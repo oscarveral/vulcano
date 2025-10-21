@@ -1,4 +1,4 @@
-use crate::{Circuit, CircuitError, Gate, GateHandle, InputHandle, OutputHandle};
+use crate::{Builder, CircuitError, Gate, GateHandle, InputHandle, OutputHandle};
 
 #[derive(Debug, Clone)]
 struct TestGate {
@@ -19,7 +19,7 @@ impl Gate for TestGate {
 
 #[test]
 fn new_circuit() {
-    let circuit: Circuit<TestGate> = Circuit::new();
+    let circuit: Builder<TestGate> = Builder::new();
     assert_eq!(circuit.gate_count(), 0);
     assert_eq!(circuit.input_count(), 0);
     assert_eq!(circuit.output_count(), 0);
@@ -27,7 +27,7 @@ fn new_circuit() {
 
 #[test]
 fn with_capacity() {
-    let circuit: Circuit<TestGate> = Circuit::with_capacity(100);
+    let circuit: Builder<TestGate> = Builder::with_capacity(100);
     assert_eq!(circuit.gate_count(), 0);
     assert_eq!(circuit.input_count(), 0);
     assert_eq!(circuit.output_count(), 0);
@@ -35,7 +35,7 @@ fn with_capacity() {
 
 #[test]
 fn add_gate() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let gate1 = circuit.add_gate(TestGate::new(2));
     let gate2 = circuit.add_gate(TestGate::new(3));
 
@@ -46,7 +46,7 @@ fn add_gate() {
 
 #[test]
 fn add_input() {
-    let mut circuit: Circuit<TestGate> = Circuit::new();
+    let mut circuit: Builder<TestGate> = Builder::new();
     let input1 = circuit.add_input();
     let input2 = circuit.add_input();
 
@@ -57,7 +57,7 @@ fn add_input() {
 
 #[test]
 fn add_output() {
-    let mut circuit: Circuit<TestGate> = Circuit::new();
+    let mut circuit: Builder<TestGate> = Builder::new();
     let output1 = circuit.add_output();
     let output2 = circuit.add_output();
 
@@ -68,7 +68,7 @@ fn add_output() {
 
 #[test]
 fn connect_input_to_gate() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input = circuit.add_input();
     let gate = circuit.add_gate(TestGate::new(2));
 
@@ -78,7 +78,7 @@ fn connect_input_to_gate() {
 
 #[test]
 fn connect_input_to_nonexistent_gate() {
-    let mut circuit: Circuit<TestGate> = Circuit::new();
+    let mut circuit: Builder<TestGate> = Builder::new();
     let input = circuit.add_input();
     let nonexistent_gate = GateHandle(99);
 
@@ -88,7 +88,7 @@ fn connect_input_to_nonexistent_gate() {
 
 #[test]
 fn connect_nonexistent_input_to_gate() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let gate = circuit.add_gate(TestGate::new(2));
     let nonexistent_input = InputHandle(99);
 
@@ -101,7 +101,7 @@ fn connect_nonexistent_input_to_gate() {
 
 #[test]
 fn connect_too_many_inputs_to_gate() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input1 = circuit.add_input();
     let input2 = circuit.add_input();
     let input3 = circuit.add_input();
@@ -119,7 +119,7 @@ fn connect_too_many_inputs_to_gate() {
 
 #[test]
 fn connect_gate_to_gate() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let gate1 = circuit.add_gate(TestGate::new(1));
     let gate2 = circuit.add_gate(TestGate::new(2));
 
@@ -129,7 +129,7 @@ fn connect_gate_to_gate() {
 
 #[test]
 fn connect_gate_to_nonexistent_gate() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let gate = circuit.add_gate(TestGate::new(1));
     let nonexistent_gate = GateHandle(99);
 
@@ -148,7 +148,7 @@ fn connect_gate_to_nonexistent_gate() {
 
 #[test]
 fn connect_gate_to_itself() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let gate = circuit.add_gate(TestGate::new(2));
 
     let result = circuit.connect_gate_to_gate(gate, gate);
@@ -157,7 +157,7 @@ fn connect_gate_to_itself() {
 
 #[test]
 fn connect_too_many_gates_to_gate() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let gate1 = circuit.add_gate(TestGate::new(1));
     let gate2 = circuit.add_gate(TestGate::new(1));
     let gate3 = circuit.add_gate(TestGate::new(1));
@@ -178,7 +178,7 @@ fn connect_too_many_gates_to_gate() {
 
 #[test]
 fn connect_gate_to_output() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let gate = circuit.add_gate(TestGate::new(1));
     let output = circuit.add_output();
 
@@ -188,7 +188,7 @@ fn connect_gate_to_output() {
 
 #[test]
 fn connect_gate_to_nonexistent_output() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let gate = circuit.add_gate(TestGate::new(1));
     let nonexistent_output = OutputHandle(99);
 
@@ -201,7 +201,7 @@ fn connect_gate_to_nonexistent_output() {
 
 #[test]
 fn connect_nonexistent_gate_to_output() {
-    let mut circuit: Circuit<TestGate> = Circuit::new();
+    let mut circuit: Builder<TestGate> = Builder::new();
     let output = circuit.add_output();
     let nonexistent_gate = GateHandle(99);
 
@@ -211,7 +211,7 @@ fn connect_nonexistent_gate_to_output() {
 
 #[test]
 fn output_already_connected() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let gate1 = circuit.add_gate(TestGate::new(1));
     let gate2 = circuit.add_gate(TestGate::new(1));
     let output = circuit.add_output();
@@ -227,7 +227,7 @@ fn output_already_connected() {
 
 #[test]
 fn gate_cannot_connect_to_multiple_outputs() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let gate = circuit.add_gate(TestGate::new(1));
     let output1 = circuit.add_output();
     let output2 = circuit.add_output();
@@ -243,7 +243,7 @@ fn gate_cannot_connect_to_multiple_outputs() {
 
 #[test]
 fn mixed_connections() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input1 = circuit.add_input();
     let input2 = circuit.add_input();
     let gate1 = circuit.add_gate(TestGate::new(2));
@@ -284,7 +284,7 @@ fn handles_equality() {
 
 #[test]
 fn default_circuit() {
-    let circuit: Circuit<TestGate> = Circuit::default();
+    let circuit: Builder<TestGate> = Builder::default();
     assert_eq!(circuit.gate_count(), 0);
     assert_eq!(circuit.input_count(), 0);
     assert_eq!(circuit.output_count(), 0);
@@ -334,7 +334,7 @@ fn circuit_error_display() {
 
 #[test]
 fn gate_with_arity_one() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input = circuit.add_input();
     let gate = circuit.add_gate(TestGate::new(1));
 
@@ -350,7 +350,7 @@ fn gate_with_arity_one() {
 
 #[test]
 fn large_circuit() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
 
     let inputs: Vec<_> = (0..100).map(|_| circuit.add_input()).collect();
     let gates: Vec<_> = (0..100)
@@ -373,7 +373,7 @@ fn large_circuit() {
 
 #[test]
 fn gate_can_have_multiple_forward_connections() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let gate1 = circuit.add_gate(TestGate::new(1));
     let gate2 = circuit.add_gate(TestGate::new(1));
     let gate3 = circuit.add_gate(TestGate::new(1));
@@ -384,7 +384,7 @@ fn gate_can_have_multiple_forward_connections() {
 
 #[test]
 fn gate_can_connect_to_gates_and_output() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let gate1 = circuit.add_gate(TestGate::new(1));
     let gate2 = circuit.add_gate(TestGate::new(1));
     let output = circuit.add_output();
@@ -395,7 +395,7 @@ fn gate_can_connect_to_gates_and_output() {
 
 #[test]
 fn validate_simple_valid_circuit() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input = circuit.add_input();
     let gate = circuit.add_gate(TestGate::new(1));
     let output = circuit.add_output();
@@ -408,7 +408,7 @@ fn validate_simple_valid_circuit() {
 
 #[test]
 fn validate_unused_input() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let _input = circuit.add_input();
     let gate = circuit.add_gate(TestGate::new(1));
     let output = circuit.add_output();
@@ -423,7 +423,7 @@ fn validate_unused_input() {
 
 #[test]
 fn validate_unused_output() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input1 = circuit.add_input();
     let input2 = circuit.add_input();
     let gate1 = circuit.add_gate(TestGate::new(1));
@@ -442,7 +442,7 @@ fn validate_unused_output() {
 
 #[test]
 fn validate_zero_arity_gate() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input = circuit.add_input();
     let gate1 = circuit.add_gate(TestGate::new(1));
     let gate2 = circuit.add_gate(TestGate::new(0));
@@ -457,7 +457,7 @@ fn validate_zero_arity_gate() {
 
 #[test]
 fn validate_too_little_connections() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input = circuit.add_input();
     let gate = circuit.add_gate(TestGate::new(2));
     let output = circuit.add_output();
@@ -474,7 +474,7 @@ fn validate_too_little_connections() {
 
 #[test]
 fn validate_cycle_two_gates() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input = circuit.add_input();
     let gate1 = circuit.add_gate(TestGate::new(2));
     let gate2 = circuit.add_gate(TestGate::new(1));
@@ -491,7 +491,7 @@ fn validate_cycle_two_gates() {
 
 #[test]
 fn validate_cycle_three_gates() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input = circuit.add_input();
     let gate1 = circuit.add_gate(TestGate::new(2));
     let gate2 = circuit.add_gate(TestGate::new(1));
@@ -510,7 +510,7 @@ fn validate_cycle_three_gates() {
 
 #[test]
 fn validate_cycle_in_disconnected_subgraph() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
 
     let input1 = circuit.add_input();
     let gate1 = circuit.add_gate(TestGate::new(1));
@@ -529,7 +529,7 @@ fn validate_cycle_in_disconnected_subgraph() {
 
 #[test]
 fn validate_unreachable_gate_simple() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input = circuit.add_input();
     let gate1 = circuit.add_gate(TestGate::new(1));
     let gate2 = circuit.add_gate(TestGate::new(2));
@@ -556,7 +556,7 @@ fn validate_unreachable_gate_simple() {
 
 #[test]
 fn validate_dead_end_gate() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input1 = circuit.add_input();
     let input2 = circuit.add_input();
     let gate1 = circuit.add_gate(TestGate::new(1));
@@ -574,7 +574,7 @@ fn validate_dead_end_gate() {
 
 #[test]
 fn validate_complex_valid_circuit() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
 
     let input1 = circuit.add_input();
     let input2 = circuit.add_input();
@@ -598,7 +598,7 @@ fn validate_complex_valid_circuit() {
 
 #[test]
 fn validate_gate_with_multiple_forward_edges() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input = circuit.add_input();
     let gate1 = circuit.add_gate(TestGate::new(1));
     let gate2 = circuit.add_gate(TestGate::new(1));
@@ -617,7 +617,7 @@ fn validate_gate_with_multiple_forward_edges() {
 
 #[test]
 fn validate_dag_no_cycle() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
 
     let input = circuit.add_input();
     let gate1 = circuit.add_gate(TestGate::new(1));
@@ -636,7 +636,7 @@ fn validate_dag_no_cycle() {
 
 #[test]
 fn validate_multiple_inputs_to_same_gate() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input1 = circuit.add_input();
     let input2 = circuit.add_input();
     let gate = circuit.add_gate(TestGate::new(2));
@@ -651,7 +651,7 @@ fn validate_multiple_inputs_to_same_gate() {
 
 #[test]
 fn validate_mixed_input_and_gate_connections() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input = circuit.add_input();
     let gate1 = circuit.add_gate(TestGate::new(1));
     let gate2 = circuit.add_gate(TestGate::new(2));
@@ -667,7 +667,7 @@ fn validate_mixed_input_and_gate_connections() {
 
 #[test]
 fn validate_large_valid_circuit() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
 
     let inputs: Vec<_> = (0..10).map(|_| circuit.add_input()).collect();
     let gates: Vec<_> = (0..10)
@@ -688,7 +688,7 @@ fn validate_large_valid_circuit() {
 
 #[test]
 fn validate_cycle_after_valid_path() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
     let input1 = circuit.add_input();
     let input2 = circuit.add_input();
     let gate1 = circuit.add_gate(TestGate::new(2));
@@ -707,14 +707,14 @@ fn validate_cycle_after_valid_path() {
 
 #[test]
 fn validate_empty_circuit_passes() {
-    let circuit: Circuit<TestGate> = Circuit::new();
+    let circuit: Builder<TestGate> = Builder::new();
 
     assert!(circuit.validate().is_ok());
 }
 
 #[test]
 fn validate_partial_connectivity() {
-    let mut circuit = Circuit::new();
+    let mut circuit = Builder::new();
 
     let input1 = circuit.add_input();
     let gate1 = circuit.add_gate(TestGate::new(1));

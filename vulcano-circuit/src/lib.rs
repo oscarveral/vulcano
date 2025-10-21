@@ -1,9 +1,9 @@
-mod circuit;
+mod builder;
 mod error;
 mod gate;
 mod handles;
 
-pub use circuit::Circuit;
+pub use builder::Builder;
 pub use error::CircuitError;
 pub use gate::Gate;
 pub use handles::{GateHandle, InputHandle, OutputHandle};
