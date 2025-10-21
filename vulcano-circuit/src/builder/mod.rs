@@ -2,11 +2,8 @@
 mod tests;
 
 use crate::{Error, Gate, GateHandle, InputHandle, OutputHandle};
-use smallvec::SmallVec;
 
-const EDGE_THRESHOLD: usize = 4;
 const INITIAL_CAPACITY: usize = 16;
-const _: () = assert!(EDGE_THRESHOLD > 0, "EDGE_THRESHOLD must be positive");
 const _: () = assert!(INITIAL_CAPACITY > 0, "INITIAL_CAPACITY must be positive");
 
 enum Source {
@@ -19,13 +16,17 @@ enum Destination {
     Gate(GateHandle),
 }
 
-type BackwardEdge = SmallVec<Source, EDGE_THRESHOLD>;
-type ForwardEdge = SmallVec<Destination, EDGE_THRESHOLD>;
+type BackwardEdge = Vec<Source>;
+type ForwardEdge = Vec<Destination>;
+
+struct GateEntry<T: Gate> {
+    gate: T,
+    backward_edges: BackwardEdge,
+    forward_edges: ForwardEdge,
+}
 
 pub struct Builder<T: Gate> {
-    gates: Vec<T>,
-    backward_edges: Vec<BackwardEdge>,
-    forward_edges: Vec<ForwardEdge>,
+    gate_entries: Vec<GateEntry<T>>,
     connected_outputs: Vec<bool>,
     connected_inputs: Vec<bool>,
 }
@@ -37,16 +38,14 @@ impl<T: Gate> Builder<T> {
 
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            gates: Vec::with_capacity(capacity),
-            backward_edges: Vec::with_capacity(capacity),
-            forward_edges: Vec::with_capacity(capacity),
+            gate_entries: Vec::with_capacity(capacity),
             connected_outputs: Vec::with_capacity(0),
             connected_inputs: Vec::with_capacity(0),
         }
     }
 
     pub fn gate_count(&self) -> usize {
-        self.gates.len()
+        self.gate_entries.len()
     }
 
     pub fn input_count(&self) -> usize {
@@ -58,10 +57,12 @@ impl<T: Gate> Builder<T> {
     }
 
     pub fn add_gate(&mut self, gate: T) -> GateHandle {
-        let handle = self.gates.len();
-        self.gates.push(gate);
-        self.backward_edges.push(BackwardEdge::new());
-        self.forward_edges.push(ForwardEdge::new());
+        let handle = self.gate_entries.len();
+        self.gate_entries.push(GateEntry {
+            gate,
+            backward_edges: Vec::new(),
+            forward_edges: Vec::new(),
+        });
         GateHandle(handle)
     }
 
@@ -85,17 +86,17 @@ impl<T: Gate> Builder<T> {
         if input.0 >= self.connected_inputs.len() {
             return Err(Error::NonExistentInput(input));
         }
-        if gate.0 >= self.gates.len() {
+        if gate.0 >= self.gate_entries.len() {
             return Err(Error::NonExistentGate(gate));
         }
-        let gate_arity = self.gates[gate.0].arity();
-        if self.backward_edges[gate.0].len() >= gate_arity {
+        let gate_arity = self.gate_entries[gate.0].gate.arity();
+        if self.gate_entries[gate.0].backward_edges.len() >= gate_arity {
             return Err(Error::TooManyConnections {
                 gate,
                 arity: gate_arity,
             });
         }
-        self.backward_edges[gate.0].push(Source::Input(input));
+        self.gate_entries[gate.0].backward_edges.push(Source::Input(input));
         self.connected_inputs[input.0] = true;
         Ok(())
     }
@@ -105,24 +106,24 @@ impl<T: Gate> Builder<T> {
         src_gate: GateHandle,
         dst_gate: GateHandle,
     ) -> Result<(), Error> {
-        if src_gate.0 >= self.gates.len() {
+        if src_gate.0 >= self.gate_entries.len() {
             return Err(Error::NonExistentGate(src_gate));
         }
-        if dst_gate.0 >= self.gates.len() {
+        if dst_gate.0 >= self.gate_entries.len() {
             return Err(Error::NonExistentGate(dst_gate));
         }
         if src_gate == dst_gate {
             return Err(Error::SelfConnection(src_gate));
         }
-        let dst_arity = self.gates[dst_gate.0].arity();
-        if self.backward_edges[dst_gate.0].len() >= dst_arity {
+        let dst_arity = self.gate_entries[dst_gate.0].gate.arity();
+        if self.gate_entries[dst_gate.0].backward_edges.len() >= dst_arity {
             return Err(Error::TooManyConnections {
                 gate: dst_gate,
                 arity: dst_arity,
             });
         }
-        self.backward_edges[dst_gate.0].push(Source::Gate(src_gate));
-        self.forward_edges[src_gate.0].push(Destination::Gate(dst_gate));
+        self.gate_entries[dst_gate.0].backward_edges.push(Source::Gate(src_gate));
+        self.gate_entries[src_gate.0].forward_edges.push(Destination::Gate(dst_gate));
         Ok(())
     }
 
@@ -131,7 +132,7 @@ impl<T: Gate> Builder<T> {
         gate: GateHandle,
         output: OutputHandle,
     ) -> Result<(), Error> {
-        if gate.0 >= self.gates.len() {
+        if gate.0 >= self.gate_entries.len() {
             return Err(Error::NonExistentGate(gate));
         }
         if output.0 >= self.connected_outputs.len() {
@@ -140,13 +141,13 @@ impl<T: Gate> Builder<T> {
         if self.connected_outputs[output.0] {
             return Err(Error::OutputAlreadyConnectedToGate(output));
         }
-        if self.forward_edges[gate.0]
+        if self.gate_entries[gate.0].forward_edges
             .iter()
             .any(|d| matches!(d, Destination::Output(_)))
         {
             return Err(Error::GateAlreadyConnectedToOutput(gate));
         }
-        self.forward_edges[gate.0].push(Destination::Output(output));
+        self.gate_entries[gate.0].forward_edges.push(Destination::Output(output));
         self.connected_outputs[output.0] = true;
         Ok(())
     }
@@ -164,14 +165,14 @@ impl<T: Gate> Builder<T> {
             }
         }
 
-        for (i, gate) in self.gates.iter().enumerate() {
-            if gate.arity() == 0 {
+        for (i, gate) in self.gate_entries.iter().enumerate() {
+            if gate.gate.arity() == 0 {
                 return Err(Error::ZeroArityGate(GateHandle(i)));
             }
-            if self.backward_edges[i].len() != gate.arity() {
+            if gate.backward_edges.len() != gate.gate.arity() {
                 return Err(Error::TooLittleConnections {
                     gate: GateHandle(i),
-                    arity: gate.arity(),
+                    arity: gate.gate.arity(),
                 });
             }
         }
@@ -183,9 +184,9 @@ impl<T: Gate> Builder<T> {
             Visited,
         }
 
-        let mut state = vec![VisitState::Unvisited; self.gates.len()];
+        let mut state = vec![VisitState::Unvisited; self.gate_entries.len()];
 
-        for start_idx in 0..self.gates.len() {
+        for start_idx in 0..self.gate_entries.len() {
             if state[start_idx] != VisitState::Unvisited {
                 continue;
             }
@@ -208,7 +209,7 @@ impl<T: Gate> Builder<T> {
 
                 state[gate_idx] = VisitState::Visiting;
 
-                for source in &self.backward_edges[gate_idx] {
+                for source in &self.gate_entries[gate_idx].backward_edges {
                     if let Source::Gate(src_gate) = source {
                         match state[src_gate.0] {
                             VisitState::Visiting => {
@@ -224,18 +225,18 @@ impl<T: Gate> Builder<T> {
             }
         }
 
-        let mut reachable_from_inputs = vec![false; self.gates.len()];
+        let mut reachable_from_inputs = vec![false; self.gate_entries.len()];
         let mut queue = Vec::new();
 
-        for (gate_idx, edges) in self.backward_edges.iter().enumerate() {
-            if edges.iter().any(|s| matches!(s, Source::Input(_))) {
+        for (gate_idx, edges) in self.gate_entries.iter().enumerate() {
+            if edges.backward_edges.iter().any(|s| matches!(s, Source::Input(_))) {
                 reachable_from_inputs[gate_idx] = true;
                 queue.push(gate_idx);
             }
         }
 
         while let Some(gate_idx) = queue.pop() {
-            for dest in &self.forward_edges[gate_idx] {
+            for dest in &self.gate_entries[gate_idx].forward_edges {
                 if let Destination::Gate(dst_gate) = dest
                     && !reachable_from_inputs[dst_gate.0]
                 {
@@ -245,18 +246,18 @@ impl<T: Gate> Builder<T> {
             }
         }
 
-        let mut reachable_to_outputs = vec![false; self.gates.len()];
+        let mut reachable_to_outputs = vec![false; self.gate_entries.len()];
         queue.clear();
 
-        for (gate_idx, edges) in self.forward_edges.iter().enumerate() {
-            if edges.iter().any(|d| matches!(d, Destination::Output(_))) {
+        for (gate_idx, edges) in self.gate_entries.iter().enumerate() {
+            if edges.forward_edges.iter().any(|d| matches!(d, Destination::Output(_))) {
                 reachable_to_outputs[gate_idx] = true;
                 queue.push(gate_idx);
             }
         }
 
         while let Some(gate_idx) = queue.pop() {
-            for source in &self.backward_edges[gate_idx] {
+            for source in &self.gate_entries[gate_idx].backward_edges {
                 if let Source::Gate(src_gate) = source
                     && !reachable_to_outputs[src_gate.0]
                 {
@@ -266,7 +267,7 @@ impl<T: Gate> Builder<T> {
             }
         }
 
-        for gate_idx in 0..self.gates.len() {
+        for gate_idx in 0..self.gate_entries.len() {
             if !reachable_from_inputs[gate_idx] {
                 return Err(Error::UnreachableGate(GateHandle(gate_idx)));
             }

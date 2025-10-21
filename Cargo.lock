@@ -3,14 +3,5 @@
 version = 4
 
 [[package]]
-name = "smallvec"
-version = "2.0.0-alpha.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87b96efa4bd6bdd2ff0c6615cc36fc4970cbae63cfd46ddff5cee35a1b4df570"
-
-[[package]]
 name = "vulcano-circuit"
 version = "0.1.0"
-dependencies = [
- "smallvec",
-]
