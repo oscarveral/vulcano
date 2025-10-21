@@ -28,8 +28,6 @@ pub struct Circuit<T: Gate> {
     forward_edges: Vec<ForwardEdge>,
     connected_outputs: Vec<bool>,
     connected_inputs: Vec<bool>,
-    input_count: usize,
-    output_count: usize,
 }
 
 impl<T: Gate> Circuit<T> {
@@ -44,8 +42,6 @@ impl<T: Gate> Circuit<T> {
             forward_edges: Vec::with_capacity(capacity),
             connected_outputs: Vec::with_capacity(0),
             connected_inputs: Vec::with_capacity(0),
-            input_count: 0,
-            output_count: 0,
         }
     }
 
@@ -54,11 +50,11 @@ impl<T: Gate> Circuit<T> {
     }
 
     pub fn input_count(&self) -> usize {
-        self.input_count
+        self.connected_inputs.len()
     }
 
     pub fn output_count(&self) -> usize {
-        self.output_count
+        self.connected_outputs.len()
     }
 
     pub fn add_gate(&mut self, gate: T) -> GateHandle {
@@ -70,15 +66,13 @@ impl<T: Gate> Circuit<T> {
     }
 
     pub fn add_input(&mut self) -> InputHandle {
-        let handle = self.input_count;
-        self.input_count += 1;
+        let handle = self.connected_inputs.len();
         self.connected_inputs.push(false);
         InputHandle(handle)
     }
 
     pub fn add_output(&mut self) -> OutputHandle {
-        let handle = self.output_count;
-        self.output_count += 1;
+        let handle = self.connected_outputs.len();
         self.connected_outputs.push(false);
         OutputHandle(handle)
     }
@@ -88,7 +82,7 @@ impl<T: Gate> Circuit<T> {
         input: InputHandle,
         gate: GateHandle,
     ) -> Result<(), CircuitError> {
-        if input.0 >= self.input_count {
+        if input.0 >= self.connected_inputs.len() {
             return Err(CircuitError::NonExistentInput(input));
         }
         if gate.0 >= self.gates.len() {
@@ -140,7 +134,7 @@ impl<T: Gate> Circuit<T> {
         if gate.0 >= self.gates.len() {
             return Err(CircuitError::NonExistentGate(gate));
         }
-        if output.0 >= self.output_count {
+        if output.0 >= self.connected_outputs.len() {
             return Err(CircuitError::NonExistentOutput(output));
         }
         if self.connected_outputs[output.0] {
