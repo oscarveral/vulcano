@@ -3,7 +3,7 @@ mod error;
 mod gate;
 mod handles;
 
-pub use builder::Builder;
-pub use error::Error;
-pub use gate::Gate;
-pub use handles::{GateHandle, InputHandle, OutputHandle};
+pub use crate::builder::Builder;
+pub use crate::error::Error;
+pub use crate::gate::Gate;
+pub use crate::handles::{Input, Node, Output};

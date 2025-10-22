@@ -1,6 +1,6 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct GateHandle(pub usize);
+pub struct Node(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct InputHandle(pub usize);
+pub struct Input(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct OutputHandle(pub usize);
+pub struct Output(pub usize);

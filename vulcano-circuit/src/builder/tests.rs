@@ -1,4 +1,9 @@
-use crate::{Builder, Error, Gate, GateHandle, InputHandle, OutputHandle};
+use crate::{
+    builder::Builder,
+    error::Error,
+    gate::Gate,
+    handles::{Input, Node, Output},
+};
 
 #[derive(Debug, Clone)]
 struct TestGate {
@@ -27,7 +32,7 @@ fn new_builder() {
 
 #[test]
 fn with_capacity() {
-    let builder: Builder<TestGate> = Builder::with_capacity(100);
+    let builder: Builder<TestGate> = Builder::with_capacity(100, 50, 50);
     assert_eq!(builder.gate_count(), 0);
     assert_eq!(builder.input_count(), 0);
     assert_eq!(builder.output_count(), 0);
@@ -40,8 +45,8 @@ fn add_gate() {
     let gate2 = builder.add_gate(TestGate::new(3));
 
     assert_eq!(builder.gate_count(), 2);
-    assert_eq!(gate1, GateHandle(0));
-    assert_eq!(gate2, GateHandle(1));
+    assert_eq!(gate1, Node(0));
+    assert_eq!(gate2, Node(1));
 }
 
 #[test]
@@ -51,8 +56,8 @@ fn add_input() {
     let input2 = builder.add_input();
 
     assert_eq!(builder.input_count(), 2);
-    assert_eq!(input1, InputHandle(0));
-    assert_eq!(input2, InputHandle(1));
+    assert_eq!(input1, Input(0));
+    assert_eq!(input2, Input(1));
 }
 
 #[test]
@@ -62,8 +67,8 @@ fn add_output() {
     let output2 = builder.add_output();
 
     assert_eq!(builder.output_count(), 2);
-    assert_eq!(output1, OutputHandle(0));
-    assert_eq!(output2, OutputHandle(1));
+    assert_eq!(output1, Output(0));
+    assert_eq!(output2, Output(1));
 }
 
 #[test]
@@ -80,7 +85,7 @@ fn connect_input_to_gate() {
 fn connect_input_to_nonexistent_gate() {
     let mut builder: Builder<TestGate> = Builder::new();
     let input = builder.add_input();
-    let nonexistent_gate = GateHandle(99);
+    let nonexistent_gate = Node(99);
 
     let result = builder.connect_input_to_gate(input, nonexistent_gate);
     assert_eq!(result, Err(Error::NonExistentGate(nonexistent_gate)));
@@ -90,7 +95,7 @@ fn connect_input_to_nonexistent_gate() {
 fn connect_nonexistent_input_to_gate() {
     let mut builder = Builder::new();
     let gate = builder.add_gate(TestGate::new(2));
-    let nonexistent_input = InputHandle(99);
+    let nonexistent_input = Input(99);
 
     let result = builder.connect_input_to_gate(nonexistent_input, gate);
     assert_eq!(result, Err(Error::NonExistentInput(nonexistent_input)));
@@ -125,7 +130,7 @@ fn connect_gate_to_gate() {
 fn connect_gate_to_nonexistent_gate() {
     let mut builder = Builder::new();
     let gate = builder.add_gate(TestGate::new(1));
-    let nonexistent_gate = GateHandle(99);
+    let nonexistent_gate = Node(99);
 
     let result1 = builder.connect_gate_to_gate(nonexistent_gate, gate);
     assert_eq!(result1, Err(Error::NonExistentGate(nonexistent_gate)));
@@ -178,7 +183,7 @@ fn connect_gate_to_output() {
 fn connect_gate_to_nonexistent_output() {
     let mut builder = Builder::new();
     let gate = builder.add_gate(TestGate::new(1));
-    let nonexistent_output = OutputHandle(99);
+    let nonexistent_output = Output(99);
 
     let result = builder.connect_gate_to_output(gate, nonexistent_output);
     assert_eq!(result, Err(Error::NonExistentOutput(nonexistent_output)));
@@ -188,7 +193,7 @@ fn connect_gate_to_nonexistent_output() {
 fn connect_nonexistent_gate_to_output() {
     let mut builder: Builder<TestGate> = Builder::new();
     let output = builder.add_output();
-    let nonexistent_gate = GateHandle(99);
+    let nonexistent_gate = Node(99);
 
     let result = builder.connect_gate_to_output(nonexistent_gate, output);
     assert_eq!(result, Err(Error::NonExistentGate(nonexistent_gate)));
@@ -239,23 +244,23 @@ fn mixed_connections() {
 
 #[test]
 fn handles_equality() {
-    let gate1 = GateHandle(0);
-    let gate2 = GateHandle(0);
-    let gate3 = GateHandle(1);
+    let gate1 = Node(0);
+    let gate2 = Node(0);
+    let gate3 = Node(1);
 
     assert_eq!(gate1, gate2);
     assert_ne!(gate1, gate3);
 
-    let input1 = InputHandle(0);
-    let input2 = InputHandle(0);
-    let input3 = InputHandle(1);
+    let input1 = Input(0);
+    let input2 = Input(0);
+    let input3 = Input(1);
 
     assert_eq!(input1, input2);
     assert_ne!(input1, input3);
 
-    let output1 = OutputHandle(0);
-    let output2 = OutputHandle(0);
-    let output3 = OutputHandle(1);
+    let output1 = Output(0);
+    let output2 = Output(0);
+    let output3 = Output(1);
 
     assert_eq!(output1, output2);
     assert_ne!(output1, output3);
@@ -352,7 +357,7 @@ fn build_unused_input() {
     builder.connect_gate_to_output(gate, output).unwrap();
 
     let result = builder.build();
-    assert_eq!(result, Err(Error::UnusedInput(InputHandle(0))));
+    assert_eq!(result, Err(Error::UnusedInput(Input(0))));
 }
 
 #[test]
@@ -371,7 +376,7 @@ fn build_unused_output() {
     builder.connect_gate_to_output(gate1, output2).unwrap();
 
     let result = builder.build();
-    assert_eq!(result, Err(Error::UnusedOutput(OutputHandle(0))));
+    assert_eq!(result, Err(Error::UnusedOutput(Output(0))));
 }
 
 #[test]

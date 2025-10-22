@@ -1,23 +1,23 @@
-use crate::{GateHandle, InputHandle, OutputHandle};
+use crate::handles::{Input, Node, Output};
 use std::{error::Error as StdErr, fmt::Display};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
-    NonExistentGate(GateHandle),
-    NonExistentInput(InputHandle),
-    NonExistentOutput(OutputHandle),
-    TooManyConnections { gate: GateHandle, arity: usize },
-    TooLittleConnections { gate: GateHandle, arity: usize },
-    SelfConnection(GateHandle),
-    OutputAlreadyConnectedToGate(OutputHandle),
-    GateAlreadyConnectedToOutput(GateHandle),
-    UnusedInput(InputHandle),
-    UnusedOutput(OutputHandle),
-    CycleDetected(GateHandle),
-    UnreachableGate(GateHandle),
-    DeadEndGate(GateHandle),
-    ZeroArityGate(GateHandle),
-    AnomalyOnCycleCheck(GateHandle),
+    NonExistentGate(Node),
+    NonExistentInput(Input),
+    NonExistentOutput(Output),
+    TooManyConnections { gate: Node, arity: usize },
+    TooLittleConnections { gate: Node, arity: usize },
+    SelfConnection(Node),
+    OutputAlreadyConnectedToGate(Output),
+    GateAlreadyConnectedToOutput(Node),
+    UnusedInput(Input),
+    UnusedOutput(Output),
+    CycleDetected(Node),
+    UnreachableGate(Node),
+    DeadEndGate(Node),
+    ZeroArityGate(Node),
+    AnomalyOnCycleCheck(Node),
 }
 
 impl StdErr for Error {}
