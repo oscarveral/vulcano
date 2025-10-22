@@ -3,7 +3,7 @@ mod entry;
 mod tests;
 
 use crate::{
-    builder::entry::{Destination, GateEntry, Source},
+    builder::entry::{Destination, Entry, Source},
     error::Error,
     gate::Gate,
     handles::{Input, Node, Output},
@@ -26,9 +26,9 @@ const _: () = assert!(
 );
 
 pub struct Builder<T: Gate> {
-    gate_entries: Vec<GateEntry<T>>,
-    connected_outputs: Vec<bool>,
-    connected_inputs: Vec<bool>,
+    gate_entries: Vec<Entry<T>>,
+    connected_outputs: Vec<Option<Node>>,
+    connected_inputs: Vec<Option<Node>>,
 }
 
 impl<T: Gate> Builder<T> {
@@ -62,19 +62,19 @@ impl<T: Gate> Builder<T> {
 
     pub fn add_gate(&mut self, gate: T) -> Node {
         let handle = self.gate_entries.len();
-        self.gate_entries.push(GateEntry::new(gate));
+        self.gate_entries.push(Entry::new(gate));
         Node(handle)
     }
 
     pub fn add_input(&mut self) -> Input {
         let handle = self.connected_inputs.len();
-        self.connected_inputs.push(false);
+        self.connected_inputs.push(None);
         Input(handle)
     }
 
     pub fn add_output(&mut self) -> Output {
         let handle = self.connected_outputs.len();
-        self.connected_outputs.push(false);
+        self.connected_outputs.push(None);
         Output(handle)
     }
 
@@ -95,7 +95,7 @@ impl<T: Gate> Builder<T> {
         self.gate_entries[gate.0]
             .backward_edges
             .push(Source::Input(input));
-        self.connected_inputs[input.0] = true;
+        self.connected_inputs[input.0] = Some(gate);
         Ok(())
     }
 
@@ -132,7 +132,7 @@ impl<T: Gate> Builder<T> {
         if output.0 >= self.connected_outputs.len() {
             return Err(Error::NonExistentOutput(output));
         }
-        if self.connected_outputs[output.0] {
+        if self.connected_outputs[output.0].is_some() {
             return Err(Error::OutputAlreadyConnectedToGate(output));
         }
         if self.gate_entries[gate.0]
@@ -145,19 +145,19 @@ impl<T: Gate> Builder<T> {
         self.gate_entries[gate.0]
             .forward_edges
             .push(Destination::Output(output));
-        self.connected_outputs[output.0] = true;
+        self.connected_outputs[output.0] = Some(gate);
         Ok(())
     }
 
-    pub fn build(&self) -> Result<(), Error> {
+    pub fn build(self) -> Result<(), Error> {
         for (i, &connected) in self.connected_inputs.iter().enumerate() {
-            if !connected {
+            if connected.is_none() {
                 return Err(Error::UnusedInput(Input(i)));
             }
         }
 
         for (i, &connected) in self.connected_outputs.iter().enumerate() {
-            if !connected {
+            if connected.is_none() {
                 return Err(Error::UnusedOutput(Output(i)));
             }
         }
@@ -182,6 +182,18 @@ impl<T: Gate> Builder<T> {
         }
 
         let mut state = vec![VisitState::Unvisited; self.gate_entries.len()];
+        let mut topological_order = Vec::with_capacity(self.gate_entries.len());
+        let mut reachable_from_inputs = vec![false; self.gate_entries.len()];
+
+        for (gate_idx, entry) in self.gate_entries.iter().enumerate() {
+            if entry
+                .backward_edges
+                .iter()
+                .any(|s| matches!(s, Source::Input(_)))
+            {
+                reachable_from_inputs[gate_idx] = true;
+            }
+        }
 
         for start_idx in 0..self.gate_entries.len() {
             if state[start_idx] != VisitState::Unvisited {
@@ -198,6 +210,7 @@ impl<T: Gate> Builder<T> {
                     VisitState::Visiting => {
                         state[gate_idx] = VisitState::Visited;
                         stack.pop();
+                        topological_order.push(gate_idx);
                         continue;
                     }
                     VisitState::Unvisited => {}
@@ -221,61 +234,56 @@ impl<T: Gate> Builder<T> {
             }
         }
 
-        let mut reachable_from_inputs = vec![false; self.gate_entries.len()];
-        let mut queue = Vec::new();
-
-        for (gate_idx, edges) in self.gate_entries.iter().enumerate() {
-            if edges
-                .backward_edges
-                .iter()
-                .any(|s| matches!(s, Source::Input(_)))
-            {
-                reachable_from_inputs[gate_idx] = true;
-                queue.push(gate_idx);
+        for &gate_idx in &topological_order {
+            if !reachable_from_inputs[gate_idx] {
+                continue;
             }
-        }
-
-        while let Some(gate_idx) = queue.pop() {
             for dest in &self.gate_entries[gate_idx].forward_edges {
-                if let Destination::Gate(dst_gate) = dest
-                    && !reachable_from_inputs[dst_gate.0]
-                {
+                if let Destination::Gate(dst_gate) = dest {
                     reachable_from_inputs[dst_gate.0] = true;
-                    queue.push(dst_gate.0);
                 }
             }
         }
 
-        let mut reachable_to_outputs = vec![false; self.gate_entries.len()];
-        queue.clear();
+        for (gate_idx, &is_reachable) in reachable_from_inputs
+            .iter()
+            .enumerate()
+            .take(self.gate_entries.len())
+        {
+            if !is_reachable {
+                return Err(Error::UnreachableGate(Node(gate_idx)));
+            }
+        }
 
-        for (gate_idx, edges) in self.gate_entries.iter().enumerate() {
-            if edges
+        let mut reachable_to_outputs = vec![false; self.gate_entries.len()];
+
+        for (gate_idx, entry) in self.gate_entries.iter().enumerate() {
+            if entry
                 .forward_edges
                 .iter()
                 .any(|d| matches!(d, Destination::Output(_)))
             {
                 reachable_to_outputs[gate_idx] = true;
-                queue.push(gate_idx);
             }
         }
 
-        while let Some(gate_idx) = queue.pop() {
+        for &gate_idx in topological_order.iter().rev() {
+            if !reachable_to_outputs[gate_idx] {
+                continue;
+            }
             for source in &self.gate_entries[gate_idx].backward_edges {
-                if let Source::Gate(src_gate) = source
-                    && !reachable_to_outputs[src_gate.0]
-                {
+                if let Source::Gate(src_gate) = source {
                     reachable_to_outputs[src_gate.0] = true;
-                    queue.push(src_gate.0);
                 }
             }
         }
 
-        for gate_idx in 0..self.gate_entries.len() {
-            if !reachable_from_inputs[gate_idx] {
-                return Err(Error::UnreachableGate(Node(gate_idx)));
-            }
-            if !reachable_to_outputs[gate_idx] {
+        for (gate_idx, &is_reachable) in reachable_to_outputs
+            .iter()
+            .enumerate()
+            .take(self.gate_entries.len())
+        {
+            if !is_reachable {
                 return Err(Error::DeadEndGate(Node(gate_idx)));
             }
         }

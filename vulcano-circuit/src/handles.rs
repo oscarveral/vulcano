@@ -4,3 +4,5 @@ pub struct Node(pub usize);
 pub struct Input(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Output(pub usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Wire(pub usize);
