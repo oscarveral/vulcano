@@ -5,4 +5,4 @@ pub struct Input(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Output(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Wire(pub usize);
+pub(crate) struct Wire(pub(crate) usize);

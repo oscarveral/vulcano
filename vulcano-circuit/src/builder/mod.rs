@@ -143,7 +143,7 @@ impl<T: Gate> Builder<T> {
         Ok(())
     }
 
-    pub fn build(self) -> Result<Circuit<T>, Error> {
+    fn check_connected_io(&self) -> Result<(), Error> {
         for (i, &connected) in self.connected_inputs.iter().enumerate() {
             if connected.is_none() {
                 return Err(Error::UnusedInput(Input(i)));
@@ -156,6 +156,10 @@ impl<T: Gate> Builder<T> {
             }
         }
 
+        Ok(())
+    }
+
+    fn check_arity(&self) -> Result<(), Error> {
         for (i, gate) in self.gate_entries.iter().enumerate() {
             if gate.gate.arity() == 0 {
                 return Err(Error::ZeroArityGate(Node(i)));
@@ -168,6 +172,10 @@ impl<T: Gate> Builder<T> {
             }
         }
 
+        Ok(())
+    }
+
+    fn check_cycles(&self) -> Result<Vec<usize>, Error> {
         #[derive(Clone, Copy, PartialEq)]
         enum VisitState {
             Unvisited,
@@ -177,17 +185,6 @@ impl<T: Gate> Builder<T> {
 
         let mut state = vec![VisitState::Unvisited; self.gate_entries.len()];
         let mut topological_order = Vec::with_capacity(self.gate_entries.len());
-        let mut reachable_from_inputs = vec![false; self.gate_entries.len()];
-
-        for (gate_idx, entry) in self.gate_entries.iter().enumerate() {
-            if entry
-                .backward_edges
-                .iter()
-                .any(|s| matches!(s, Source::Input(_)))
-            {
-                reachable_from_inputs[gate_idx] = true;
-            }
-        }
 
         for start_idx in 0..self.gate_entries.len() {
             if state[start_idx] != VisitState::Unvisited {
@@ -228,7 +225,23 @@ impl<T: Gate> Builder<T> {
             }
         }
 
-        for &gate_idx in &topological_order {
+        Ok(topological_order)
+    }
+
+    fn check_reachability(&self, topological_order: &Vec<usize>) -> Result<(), Error> {
+        let mut reachable_from_inputs = vec![false; self.gate_entries.len()];
+
+        for (gate_idx, entry) in self.gate_entries.iter().enumerate() {
+            if entry
+                .backward_edges
+                .iter()
+                .any(|s| matches!(s, Source::Input(_)))
+            {
+                reachable_from_inputs[gate_idx] = true;
+            }
+        }
+
+        for &gate_idx in topological_order {
             if !reachable_from_inputs[gate_idx] {
                 continue;
             }
@@ -280,6 +293,10 @@ impl<T: Gate> Builder<T> {
             }
         }
 
+        Ok(())
+    }
+
+    fn create_circuit(self, topological_order: Vec<usize>) -> Result<Circuit<T>, Error> {
         let mut wire_counter: usize = 0;
 
         let input_wires: Vec<Wire> = (0..self.connected_inputs.len())
@@ -341,6 +358,14 @@ impl<T: Gate> Builder<T> {
             output_wires,
             wire_counter,
         ))
+    }
+
+    pub fn build(self) -> Result<Circuit<T>, Error> {
+        self.check_connected_io()?;
+        self.check_arity()?;
+        let topological_order = self.check_cycles()?;
+        self.check_reachability(&topological_order)?;
+        self.create_circuit(topological_order)
     }
 }
 
