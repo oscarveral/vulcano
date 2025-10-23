@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use crate::{
     Circuit,
-    builder::entry::{BuilderEntry, Destination, Source},
+    builder::entry::{BuilderEntry, Source},
     circuit::entry::CircuitEntry,
     error::Error,
     gate::Gate,
@@ -123,9 +123,6 @@ impl<T: Gate> Builder<T> {
         self.gate_entries[dst_gate.0]
             .backward_edges
             .push(Source::Gate(src_gate));
-        self.gate_entries[src_gate.0]
-            .forward_edges
-            .push(Destination::Gate(dst_gate));
         Ok(())
     }
 
@@ -139,16 +136,9 @@ impl<T: Gate> Builder<T> {
         if self.connected_outputs[output.0].is_some() {
             return Err(Error::OutputAlreadyConnectedToGate(output));
         }
-        if self.gate_entries[gate.0]
-            .forward_edges
-            .iter()
-            .any(|d| matches!(d, Destination::Output))
-        {
+        if self.connected_outputs.contains(&Some(gate)) {
             return Err(Error::GateAlreadyConnectedToOutput(gate));
         }
-        self.gate_entries[gate.0]
-            .forward_edges
-            .push(Destination::Output);
         self.connected_outputs[output.0] = Some(gate);
         Ok(())
     }
@@ -242,9 +232,13 @@ impl<T: Gate> Builder<T> {
             if !reachable_from_inputs[gate_idx] {
                 continue;
             }
-            for dest in &self.gate_entries[gate_idx].forward_edges {
-                if let Destination::Gate(dst_gate) = dest {
-                    reachable_from_inputs[dst_gate.0] = true;
+            for (dst_idx, entry) in self.gate_entries.iter().enumerate() {
+                if entry
+                    .backward_edges
+                    .iter()
+                    .any(|s| matches!(s, Source::Gate(g) if g.0 == gate_idx))
+                {
+                    reachable_from_inputs[dst_idx] = true;
                 }
             }
         }
@@ -261,14 +255,8 @@ impl<T: Gate> Builder<T> {
 
         let mut reachable_to_outputs = vec![false; self.gate_entries.len()];
 
-        for (gate_idx, entry) in self.gate_entries.iter().enumerate() {
-            if entry
-                .forward_edges
-                .iter()
-                .any(|d| matches!(d, Destination::Output))
-            {
-                reachable_to_outputs[gate_idx] = true;
-            }
+        for &gate_node in self.connected_outputs.iter().flatten() {
+            reachable_to_outputs[gate_node.0] = true;
         }
 
         for &gate_idx in topological_order.iter().rev() {
