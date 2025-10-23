@@ -20,6 +20,10 @@ impl Gate for TestGate {
     fn arity(&self) -> usize {
         self.arity
     }
+
+    fn name(&self) -> &str {
+        "TestGate"
+    }
 }
 
 #[test]
