@@ -2,11 +2,15 @@ mod entry;
 #[cfg(test)]
 mod tests;
 
+use std::collections::HashMap;
+
 use crate::{
-    builder::entry::{Destination, Entry, Source},
+    Circuit,
+    builder::entry::{BuilderEntry, Destination, Source},
+    circuit::entry::CircuitEntry,
     error::Error,
     gate::Gate,
-    handles::{Input, Node, Output},
+    handles::{Input, Node, Output, Wire},
 };
 
 const INITIAL_GATE_CAPACITY: usize = 16;
@@ -26,7 +30,7 @@ const _: () = assert!(
 );
 
 pub struct Builder<T: Gate> {
-    gate_entries: Vec<Entry<T>>,
+    gate_entries: Vec<BuilderEntry<T>>,
     connected_outputs: Vec<Option<Node>>,
     connected_inputs: Vec<Option<Node>>,
 }
@@ -62,7 +66,7 @@ impl<T: Gate> Builder<T> {
 
     pub fn add_gate(&mut self, gate: T) -> Node {
         let handle = self.gate_entries.len();
-        self.gate_entries.push(Entry::new(gate));
+        self.gate_entries.push(BuilderEntry::new(gate));
         Node(handle)
     }
 
@@ -138,18 +142,18 @@ impl<T: Gate> Builder<T> {
         if self.gate_entries[gate.0]
             .forward_edges
             .iter()
-            .any(|d| matches!(d, Destination::Output(_)))
+            .any(|d| matches!(d, Destination::Output))
         {
             return Err(Error::GateAlreadyConnectedToOutput(gate));
         }
         self.gate_entries[gate.0]
             .forward_edges
-            .push(Destination::Output(output));
+            .push(Destination::Output);
         self.connected_outputs[output.0] = Some(gate);
         Ok(())
     }
 
-    pub fn build(self) -> Result<(), Error> {
+    pub fn build(self) -> Result<Circuit<T>, Error> {
         for (i, &connected) in self.connected_inputs.iter().enumerate() {
             if connected.is_none() {
                 return Err(Error::UnusedInput(Input(i)));
@@ -261,7 +265,7 @@ impl<T: Gate> Builder<T> {
             if entry
                 .forward_edges
                 .iter()
-                .any(|d| matches!(d, Destination::Output(_)))
+                .any(|d| matches!(d, Destination::Output))
             {
                 reachable_to_outputs[gate_idx] = true;
             }
@@ -288,7 +292,67 @@ impl<T: Gate> Builder<T> {
             }
         }
 
-        Ok(())
+        let mut wire_counter: usize = 0;
+
+        let input_wires: Vec<Wire> = (0..self.connected_inputs.len())
+            .map(|_| {
+                let w = Wire(wire_counter);
+                wire_counter += 1;
+                w
+            })
+            .collect();
+
+        let mut gate_output_wires: HashMap<Node, Wire> =
+            HashMap::with_capacity(self.gate_entries.len());
+
+        let mut circuit_entries: Vec<CircuitEntry<T>> = Vec::with_capacity(self.gate_entries.len());
+
+        let mut owned_entries: Vec<Option<BuilderEntry<T>>> =
+            self.gate_entries.into_iter().map(Some).collect();
+
+        for &gate_idx in &topological_order {
+            let entry = owned_entries[gate_idx]
+                .take()
+                .ok_or(Error::UnexpectedNoneGateEntry(Node(gate_idx)))?;
+
+            let mut gate_input_wires = Vec::with_capacity(entry.backward_edges.len());
+
+            for source in &entry.backward_edges {
+                let wire = match source {
+                    Source::Input(input) => input_wires[input.0],
+                    Source::Gate(src_gate) => *gate_output_wires
+                        .get(src_gate)
+                        .ok_or(Error::UnmappedGateWire(*src_gate))?,
+                };
+                gate_input_wires.push(wire);
+            }
+
+            let output_wire = Wire(wire_counter);
+            gate_output_wires.insert(Node(gate_idx), output_wire);
+            wire_counter += 1;
+
+            circuit_entries.push(CircuitEntry {
+                gate: entry.gate,
+                input_wires: gate_input_wires,
+                output_wire,
+            });
+        }
+
+        let mut output_wires: Vec<Wire> = Vec::with_capacity(self.connected_outputs.len());
+        for (i, &gate_node) in self.connected_outputs.iter().enumerate() {
+            let gate = gate_node.ok_or(Error::UnexpectedUnusedOutput(Output(i)))?;
+            let wire = gate_output_wires
+                .get(&gate)
+                .ok_or(Error::UnmappedGateWire(gate))?;
+            output_wires.push(*wire);
+        }
+
+        Ok(Circuit::new(
+            circuit_entries,
+            input_wires,
+            output_wires,
+            wire_counter,
+        ))
     }
 }
 

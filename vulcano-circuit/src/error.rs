@@ -18,6 +18,9 @@ pub enum Error {
     DeadEndGate(Node),
     ZeroArityGate(Node),
     AnomalyOnCycleCheck(Node),
+    UnmappedGateWire(Node),
+    UnexpectedNoneGateEntry(Node),
+    UnexpectedUnusedOutput(Output),
 }
 
 impl StdErr for Error {}
@@ -59,6 +62,15 @@ impl Display for Error {
             }
             Error::AnomalyOnCycleCheck(h) => {
                 write!(f, "Anomaly detected during cycle check at gate {:?}", h)
+            }
+            Error::UnmappedGateWire(h) => {
+                write!(f, "Gate {:?} has an unmapped wire", h)
+            }
+            Error::UnexpectedNoneGateEntry(h) => {
+                write!(f, "Unexpected None gate entry for gate {:?}", h)
+            }
+            Error::UnexpectedUnusedOutput(h) => {
+                write!(f, "Unexpected unused output {:?}", h)
             }
         }
     }

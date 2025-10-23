@@ -357,7 +357,7 @@ fn build_unused_input() {
     builder.connect_gate_to_output(gate, output).unwrap();
 
     let result = builder.build();
-    assert_eq!(result, Err(Error::UnusedInput(Input(0))));
+    assert!(matches!(result, Err(Error::UnusedInput(Input(0)))));
 }
 
 #[test]
@@ -376,7 +376,7 @@ fn build_unused_output() {
     builder.connect_gate_to_output(gate1, output2).unwrap();
 
     let result = builder.build();
-    assert_eq!(result, Err(Error::UnusedOutput(Output(0))));
+    assert!(matches!(result, Err(Error::UnusedOutput(Output(0)))));
 }
 
 #[test]
@@ -391,7 +391,7 @@ fn build_zero_arity_gate() {
     builder.connect_gate_to_output(gate1, output).unwrap();
 
     let result = builder.build();
-    assert_eq!(result, Err(Error::ZeroArityGate(gate2)));
+    assert!(matches!(result, Err(Error::ZeroArityGate(g)) if g == gate2));
 }
 
 #[test]
@@ -405,7 +405,7 @@ fn build_too_little_connections() {
     builder.connect_gate_to_output(gate, output).unwrap();
 
     let result = builder.build();
-    assert_eq!(result, Err(Error::TooLittleConnections { gate, arity: 2 }));
+    assert!(matches!(result, Err(Error::TooLittleConnections { gate: g, arity: 2 }) if g == gate));
 }
 
 #[test]
@@ -505,7 +505,7 @@ fn build_dead_end_gate() {
     builder.connect_input_to_gate(input2, gate2).unwrap();
 
     let result = builder.build();
-    assert_eq!(result, Err(Error::DeadEndGate(gate2)));
+    assert!(matches!(result, Err(Error::DeadEndGate(g)) if g == gate2));
 }
 
 #[test]
@@ -663,5 +663,5 @@ fn build_partial_connectivity() {
     builder.connect_input_to_gate(input2, gate2).unwrap();
 
     let result = builder.build();
-    assert_eq!(result, Err(Error::DeadEndGate(gate2)));
+    assert!(matches!(result, Err(Error::DeadEndGate(g)) if g == gate2));
 }

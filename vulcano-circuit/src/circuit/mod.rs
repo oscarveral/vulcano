@@ -1,35 +1,30 @@
-use crate::{gate::Gate, handles::Wire};
+pub(crate) mod entry;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GateEntry<T: Gate> {
-    gate: T,
-    input_wires: Vec<Wire>,
-    output_wire: Wire,
-}
-
-impl<T: Gate> GateEntry<T> {
-    pub fn gate(&self) -> &T {
-        &self.gate
-    }
-
-    pub fn input_wires(&self) -> &[Wire] {
-        &self.input_wires
-    }
-
-    pub fn output_wire(&self) -> Wire {
-        self.output_wire
-    }
-}
+use crate::{circuit::entry::CircuitEntry, gate::Gate, handles::Wire};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Circuit<T: Gate> {
-    gates: Vec<GateEntry<T>>,
+    gates: Vec<CircuitEntry<T>>,
     input_wires: Vec<Wire>,
     output_wires: Vec<Wire>,
     wire_count: usize,
 }
 
 impl<T: Gate> Circuit<T> {
+    pub(crate) fn new(
+        gates: Vec<CircuitEntry<T>>,
+        input_wires: Vec<Wire>,
+        output_wires: Vec<Wire>,
+        wire_count: usize,
+    ) -> Self {
+        Self {
+            gates,
+            input_wires,
+            output_wires,
+            wire_count,
+        }
+    }
+
     pub fn gate_count(&self) -> usize {
         self.gates.len()
     }
@@ -44,17 +39,5 @@ impl<T: Gate> Circuit<T> {
 
     pub fn wire_count(&self) -> usize {
         self.wire_count
-    }
-
-    pub fn gates(&self) -> &[GateEntry<T>] {
-        &self.gates
-    }
-
-    pub fn input_wires(&self) -> &[Wire] {
-        &self.input_wires
-    }
-
-    pub fn output_wires(&self) -> &[Wire] {
-        &self.output_wires
     }
 }
