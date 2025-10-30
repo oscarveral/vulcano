@@ -1,11 +1,7 @@
-mod builder;
-mod circuit;
-mod error;
-mod gate;
-mod handles;
+//! High-level primitives for building, manipulating and evaluating computation circuits
+//! composed of arbitrary gates.
 
-pub use crate::builder::Builder;
-pub use crate::circuit::Circuit;
-pub use crate::error::Error;
-pub use crate::gate::Gate;
-pub use crate::handles::{Input, Node, Output};
+pub mod error;
+pub mod gate;
+pub mod graph;
+pub mod handles;
