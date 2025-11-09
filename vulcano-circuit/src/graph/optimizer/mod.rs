@@ -1,5 +1,5 @@
 //! Module for optimizing circuits.
-//! 
+//!
 //! This module provides functionality to optimize computation
 //! circuits represented as graphs. The optimizations can leverage
 //! analyses provided by the [`Analyzer`] module to make informed
@@ -7,10 +7,14 @@
 
 use std::any::TypeId;
 
-use crate::{error::Result, gate::Gate, graph::{analyzer::Analyzer, circuit::Circuit}};
+use crate::{
+    error::Result,
+    gate::Gate,
+    graph::{analyzer::Analyzer, circuit::Circuit},
+};
 
 /// A type alias for an optimizer pass function.
-/// 
+///
 /// Passes return a Vec of [`TypeId`] representing the analyses they preserve.
 /// An empty Vec means no analyses are preserved (invalidate all).
 type OptimizerPass<T> = fn(&mut Circuit<T>, &mut Analyzer) -> Result<Vec<TypeId>>;
@@ -40,7 +44,8 @@ impl<T: Gate> Optimizer<T> {
         for pass in &self.passes {
             let preserved_analyses = pass(&mut circuit, &mut self.analyzer)?;
             // Invalidate analyses not in preserved_analyses.
-            self.analyzer.invalidate_except(preserved_analyses.as_slice());
+            self.analyzer
+                .invalidate_except(preserved_analyses.as_slice());
         }
         Ok(circuit)
     }

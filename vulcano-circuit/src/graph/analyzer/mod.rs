@@ -6,7 +6,7 @@
 //! the [`Analysis`] trait. The analyses can be run using the
 //! `Analyzer` struct, which caches results for efficiency.
 
-pub mod topological;
+pub mod analyses;
 
 use crate::{
     error::{Error, Result},
@@ -61,8 +61,7 @@ impl Analyzer {
 
         self.cache.insert(key, Box::new(result));
 
-        self
-            .cache
+        self.cache
             .get(&key)
             .ok_or(Error::AnalysisCacheMissingEntry(key))?
             .downcast_ref::<A::Output>()
