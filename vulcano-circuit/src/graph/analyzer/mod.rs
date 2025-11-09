@@ -8,7 +8,11 @@
 
 mod topological;
 
-use crate::{error::Result, gate::Gate, graph::circuit::Circuit};
+use crate::{
+    error::{Error, Result},
+    gate::Gate,
+    graph::circuit::Circuit,
+};
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
@@ -45,24 +49,24 @@ impl Analyzer {
         let key = TypeId::of::<A>();
 
         if self.cache.contains_key(&key) {
-            return Ok(self
+            return self
                 .cache
                 .get(&key)
-                .unwrap()
+                .ok_or(Error::AnalysisCacheMissingEntry(key))?
                 .downcast_ref::<A::Output>()
-                .expect("BUG: type mismatch in analysis cache"));
+                .ok_or(Error::AnalysisCacheTypeMismatch(key));
         }
 
         let result = A::run(circuit, self)?;
 
         self.cache.insert(key, Box::new(result));
 
-        Ok(self
+        self
             .cache
             .get(&key)
-            .unwrap()
+            .ok_or(Error::AnalysisCacheMissingEntry(key))?
             .downcast_ref::<A::Output>()
-            .expect("BUG: type mismatch in analysis cache"))
+            .ok_or(Error::AnalysisCacheTypeMismatch(key))
     }
 
     /// Invalidate all cached analyses.

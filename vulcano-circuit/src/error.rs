@@ -4,6 +4,8 @@
 //! attempt invalid operations (out-of-bounds handles, exceeding gate
 //! arity, self-connections, etc.).
 
+use std::any::TypeId;
+
 use crate::handles::{Input, Operation, Output};
 
 /// Errors that can occur while constructing a circuit.
@@ -46,6 +48,10 @@ pub enum Error {
     /// This indicates a bug in the optimizer or an unexpected internal
     /// state; carries a short diagnostic message.
     InvariantViolation(String),
+    /// The analysis cache contained a result of unexpected type.
+    AnalysisCacheTypeMismatch(TypeId),
+    /// The analysis cache is missing an expected entry.
+    AnalysisCacheMissingEntry(TypeId),
 }
 
 impl std::fmt::Display for Error {
@@ -77,6 +83,12 @@ impl std::fmt::Display for Error {
             }
             Error::AlreadyFinalized => write!(f, "Circuit optimizations have been finalized"),
             Error::InvariantViolation(msg) => write!(f, "Invariant violated: {}", msg),
+            Error::AnalysisCacheTypeMismatch(type_id) => {
+                write!(f, "Analysis cache type mismatch for TypeId {:?}", type_id)
+            }
+            Error::AnalysisCacheMissingEntry(type_id) => {
+                write!(f, "Analysis cache missing entry for TypeId {:?}", type_id)
+            }
         }
     }
 }
@@ -98,6 +110,12 @@ impl std::fmt::Debug for Error {
             Error::CycleDetected(ops) => write!(f, "CycleDetected({:?})", ops),
             Error::AlreadyFinalized => write!(f, "AlreadyFinalized"),
             Error::InvariantViolation(msg) => write!(f, "InvariantViolation({})", msg),
+            Error::AnalysisCacheTypeMismatch(type_id) => {
+                write!(f, "AnalysisCacheTypeMismatch({:?})", type_id)
+            }
+            Error::AnalysisCacheMissingEntry(type_id) => {
+                write!(f, "AnalysisCacheMissingEntry({:?})", type_id)
+            }
         }
     }
 }
