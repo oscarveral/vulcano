@@ -6,7 +6,7 @@
 //! the [`Analysis`] trait. The analyses can be run using the
 //! `Analyzer` struct, which caches results for efficiency.
 
-mod topological;
+pub mod topological;
 
 use crate::{
     error::{Error, Result},
@@ -19,7 +19,7 @@ use std::{
 };
 
 /// Trait for analyses that can be performed on circuits.
-trait Analysis: 'static {
+pub trait Analysis: 'static {
     /// The output type of the analysis.
     type Output;
     /// Run the analysis on the given circuit using the provided analyzer for recursive dependant analyses.
@@ -27,21 +27,21 @@ trait Analysis: 'static {
 }
 
 /// Struct that manages and caches analyses on circuits.
-struct Analyzer {
+pub struct Analyzer {
     /// Cache mapping [`TypeId`] of analyses to their results.
     cache: HashMap<TypeId, Box<dyn Any>>,
 }
 
 impl Analyzer {
     /// Create a new [`Analyzer`].
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             cache: HashMap::new(),
         }
     }
 
     /// Get the result of an analysis, computing and caching it if necessary.
-    fn get<A, T>(&mut self, circuit: &Circuit<T>) -> Result<&A::Output>
+    pub fn get<A, T>(&mut self, circuit: &Circuit<T>) -> Result<&A::Output>
     where
         A: Analysis,
         T: Gate,
@@ -70,12 +70,12 @@ impl Analyzer {
     }
 
     /// Invalidate all cached analyses.
-    fn invalidate_all(&mut self) {
+    pub fn invalidate_all(&mut self) {
         self.cache.clear();
     }
 
     /// Invalidate all cached analyses except for the ones with the given [`TypeId`]s.
-    fn invalidate_except(&mut self, preserved: &[TypeId]) {
+    pub fn invalidate_except(&mut self, preserved: &[TypeId]) {
         self.cache.retain(|key, _| preserved.contains(key));
     }
 }

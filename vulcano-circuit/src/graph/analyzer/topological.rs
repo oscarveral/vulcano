@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Analysis that computes a topological ordering of the gates in a circuit.
-struct TopologicalOrder;
+pub struct TopologicalOrder;
 
 impl Analysis for TopologicalOrder {
     type Output = Vec<usize>;
