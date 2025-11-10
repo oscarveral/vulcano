@@ -5,6 +5,8 @@
 //! analyses provided by the [`Analyzer`] module to make informed
 //! decisions about circuit transformations.
 
+pub mod passes;
+
 use std::any::TypeId;
 
 use crate::{
@@ -15,9 +17,9 @@ use crate::{
 
 /// A type alias for an optimizer pass function.
 ///
-/// Passes return a Vec of [`TypeId`] representing the analyses they preserve.
-/// An empty Vec means no analyses are preserved (invalidate all).
-type OptimizerPass<T> = fn(&mut Circuit<T>, &mut Analyzer) -> Result<Vec<TypeId>>;
+/// Passes return a tuple containing the optimized circuit and a Vec of [`TypeId`] representing
+/// the analyses they preserve.
+type OptimizerPass<T> = fn(Circuit<T>, &mut Analyzer) -> Result<(Circuit<T>, Vec<TypeId>)>;
 
 /// Struct that manages and applies optimization passes to circuits.
 pub struct Optimizer<T: Gate> {
@@ -42,7 +44,8 @@ impl<T: Gate> Optimizer<T> {
     /// Runs all optimization passes on the given circuit.
     pub fn optimize(&mut self, mut circuit: Circuit<T>) -> Result<Circuit<T>> {
         for pass in &self.passes {
-            let preserved_analyses = pass(&mut circuit, &mut self.analyzer)?;
+            let (optimized_circuit, preserved_analyses) = pass(circuit, &mut self.analyzer)?;
+            circuit = optimized_circuit;
             // Invalidate analyses not in preserved_analyses.
             self.analyzer
                 .invalidate_except(preserved_analyses.as_slice());
