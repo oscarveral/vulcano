@@ -6,6 +6,8 @@
 //! decisions about circuit transformations.
 
 pub mod passes;
+#[cfg(test)]
+mod tests;
 
 use std::any::TypeId;
 
