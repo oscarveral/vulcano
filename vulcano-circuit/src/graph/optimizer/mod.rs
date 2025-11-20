@@ -19,11 +19,11 @@ use crate::{
 ///
 /// Passes return a tuple containing the optimized circuit and a Vec of [`TypeId`] representing
 /// the analyses they preserve.
-type OptimizerPass<T> = fn(Circuit<T>, &mut Analyzer) -> Result<(Circuit<T>, Vec<TypeId>)>;
+type OptimizerPass<T> = fn(Circuit<T>, &mut Analyzer<T>) -> Result<(Circuit<T>, Vec<TypeId>)>;
 
 /// Struct that manages and applies optimization passes to circuits.
 pub struct Optimizer<T: Gate> {
-    analyzer: Analyzer,
+    analyzer: Analyzer<T>,
     passes: Vec<OptimizerPass<T>>,
 }
 

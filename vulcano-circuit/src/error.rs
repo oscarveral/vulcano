@@ -13,6 +13,7 @@ use crate::handles::{Input, Operation, Output};
 /// Each variant carries the relevant handle so callers can present
 /// helpful diagnostics or recover (for example by creating the
 /// missing handle and retrying).
+#[derive(PartialEq, Eq)]
 pub enum Error {
     /// The referenced gate handle doesn't exist.
     NonExistentGate(Operation),

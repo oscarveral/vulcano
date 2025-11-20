@@ -12,6 +12,7 @@
 /// An [`Operation`] is a compact newtype-like wrapper around a numeric
 /// index. Use [`Operation`] when referring to the producer of a value
 /// (the gate).
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Operation {
     id: usize,
 }
@@ -28,33 +29,12 @@ impl Operation {
     }
 }
 
-impl std::fmt::Debug for Operation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Operation({})", self.id)
-    }
-}
-
-impl std::cmp::PartialEq for Operation {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl std::cmp::Eq for Operation {}
-
-impl std::clone::Clone for Operation {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl std::marker::Copy for Operation {}
-
 /// Handle identifying an input slot for the circuit.
 ///
 /// An [`Input`] represents an externally-provided input value. It is used
 /// when wiring builders or when mapping runtime inputs into the
 /// execution plan.
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Input {
     id: usize,
 }
@@ -71,25 +51,12 @@ impl Input {
     }
 }
 
-impl std::fmt::Debug for Input {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Input({})", self.id)
-    }
-}
-
-impl std::clone::Clone for Input {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl std::marker::Copy for Input {}
-
 /// Handle identifying an exported output slot of the circuit.
 ///
 /// An [`Output`] represents an externally-visible output value. It is used
 /// when wiring builders or when mapping runtime outputs from the
 /// execution plan.
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Output {
     id: usize,
 }
@@ -106,24 +73,11 @@ impl Output {
     }
 }
 
-impl std::fmt::Debug for Output {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Output({})", self.id)
-    }
-}
-
-impl std::clone::Clone for Output {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl std::marker::Copy for Output {}
-
 /// Low-level runtime handle representing storage (a wire/register).
 ///
 /// A [`Wire`] represents a runtime storage location used to hold
 /// intermediate values produced and consumed by gates during execution.
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Wire {
     id: usize,
 }
@@ -139,17 +93,3 @@ impl Wire {
         self.id
     }
 }
-
-impl std::fmt::Debug for Wire {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Wire({})", self.id)
-    }
-}
-
-impl std::clone::Clone for Wire {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl std::marker::Copy for Wire {}

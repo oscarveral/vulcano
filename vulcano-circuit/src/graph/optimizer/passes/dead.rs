@@ -16,10 +16,10 @@ use crate::{
 /// [`Reachability`] analysis to identify such gates.
 pub fn dead_gate_elimination<T: Gate>(
     mut circuit: Circuit<T>,
-    analyzer: &mut Analyzer,
+    analyzer: &mut Analyzer<T>,
 ) -> Result<(Circuit<T>, Vec<TypeId>)> {
     // Get the set of reachable gates from the Reachability analysis.
-    let reachable_gates = analyzer.get::<Reachability, T>(&circuit)?;
+    let reachable_gates = analyzer.get::<Reachability>(&circuit)?;
 
     // Retain only the gates that are reachable.
     circuit.gate_entries = circuit

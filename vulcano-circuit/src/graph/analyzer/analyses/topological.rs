@@ -20,7 +20,7 @@ pub struct TopologicalOrder;
 impl Analysis for TopologicalOrder {
     type Output = Vec<usize>;
 
-    fn run<T: Gate>(circuit: &Circuit<T>, _analyzer: &mut Analyzer) -> Result<Self::Output> {
+    fn run<T: Gate>(circuit: &Circuit<T>, _analyzer: &mut Analyzer<T>) -> Result<Self::Output> {
         let n = circuit.gate_entries.len();
 
         // Map each wire id that is an output of a gate to that gate index.

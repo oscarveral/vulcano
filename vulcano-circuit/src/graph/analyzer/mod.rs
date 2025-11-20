@@ -8,6 +8,9 @@
 
 pub mod analyses;
 
+#[cfg(test)]
+mod tests;
+
 use crate::{
     error::{Error, Result},
     gate::Gate,
@@ -23,28 +26,30 @@ pub trait Analysis: 'static {
     /// The output type of the analysis.
     type Output;
     /// Run the analysis on the given circuit using the provided analyzer for recursive dependant analyses.
-    fn run<T: Gate>(circuit: &Circuit<T>, analyzer: &mut Analyzer) -> Result<Self::Output>;
+    fn run<T: Gate>(circuit: &Circuit<T>, analyzer: &mut Analyzer<T>) -> Result<Self::Output>;
 }
 
 /// Struct that manages and caches analyses on circuits.
-pub struct Analyzer {
+pub struct Analyzer<T: Gate> {
     /// Cache mapping [`TypeId`] of analyses to their results.
     cache: HashMap<TypeId, Box<dyn Any>>,
+    /// Phantom data to associate with the gate type.
+    _marker: std::marker::PhantomData<T>,
 }
 
-impl Analyzer {
+impl<T: Gate> Analyzer<T> {
     /// Create a new [`Analyzer`].
     pub fn new() -> Self {
         Self {
             cache: HashMap::new(),
+            _marker: std::marker::PhantomData,
         }
     }
 
     /// Get the result of an analysis, computing and caching it if necessary.
-    pub fn get<A, T>(&mut self, circuit: &Circuit<T>) -> Result<&A::Output>
+    pub fn get<A>(&mut self, circuit: &Circuit<T>) -> Result<&A::Output>
     where
         A: Analysis,
-        T: Gate,
     {
         let key = TypeId::of::<A>();
 
@@ -79,7 +84,7 @@ impl Analyzer {
     }
 }
 
-impl Default for Analyzer {
+impl<T: Gate> Default for Analyzer<T> {
     fn default() -> Self {
         Self::new()
     }

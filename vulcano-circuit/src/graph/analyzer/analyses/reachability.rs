@@ -28,7 +28,7 @@ impl Analysis for Reachability {
     /// Set of gate indices that are reachable.
     type Output = HashSet<usize>;
 
-    fn run<T: Gate>(circuit: &Circuit<T>, _analyzer: &mut Analyzer) -> Result<Self::Output> {
+    fn run<T: Gate>(circuit: &Circuit<T>, _analyzer: &mut Analyzer<T>) -> Result<Self::Output> {
         let n = circuit.gate_entries.len();
 
         // Build a mapping from wire ID to the gate that produces it.

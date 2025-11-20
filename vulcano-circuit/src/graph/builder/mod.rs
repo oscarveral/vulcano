@@ -6,6 +6,9 @@
 //! attempt invalid operations (out-of-bounds handles, exceeding gate
 //! arity, self-connections, or trying to reuse an output slot).
 
+#[cfg(test)]
+mod tests;
+
 use crate::{
     error::{Error, Result},
     gate::Gate,
@@ -15,6 +18,7 @@ use crate::{
 
 /// A source that can feed a gate input: either an `Input` slot or the
 /// output of another gate (`Operation`).
+#[derive(PartialEq, Eq, Debug)]
 enum Source {
     /// The value comes from a circuit input slot.
     Input(Input),
@@ -235,6 +239,7 @@ impl<T: Gate> Builder<T> {
         for (i, (gate, sources)) in self.gate_entries.iter().enumerate() {
             let arity = gate.arity();
             if sources.len() > arity {
+                // This should not happen if connect methods are used.
                 return Err(Error::InputArityOverLimit(Operation::new(i)));
             }
             if sources.len() < arity {
@@ -262,6 +267,8 @@ impl<T: Gate> Builder<T> {
     ///   `Vec<Source>` is used as the canonical input order.
     /// - Input wires are assigned deterministically by input index,
     ///   so identical builder contents produce stable wire ids.
+    ///   This should not be relied upon as it may be changed or optimized
+    ///   in the optimizer phase.
     ///
     /// Returns a [`Circuit`] on success or an appropriate
     /// [`Error`] if validation fails.
