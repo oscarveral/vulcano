@@ -104,3 +104,226 @@ impl Analysis for Reachability {
         Ok(reachable)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        graph::{analyzer::Analyzer, builder::Builder, circuit::Circuit},
+        handles::{Input, Operation},
+    };
+
+    enum TestGate {
+        Negate,
+        Addition,
+    }
+
+    impl Gate for TestGate {
+        fn arity(&self) -> usize {
+            match self {
+                TestGate::Negate => 1,
+                TestGate::Addition => 2,
+            }
+        }
+
+        fn name(&self) -> &str {
+            match self {
+                TestGate::Negate => "Negate",
+                TestGate::Addition => "Addition",
+            }
+        }
+    }
+
+    #[test]
+    fn simple_circuit() {
+        // Layout: input -> negate -> output.
+
+        let mut builder: Builder<TestGate> = Builder::new();
+        let input = builder.add_input();
+        let gate = builder.add_gate(TestGate::Negate);
+        let output = builder.add_output();
+
+        builder.connect_input_to_gate(input, gate).unwrap();
+        builder.connect_gate_to_output(gate, output).unwrap();
+
+        let circuit = builder.finalize().unwrap();
+        let mut analyzer = Analyzer::new();
+        let result = analyzer.get::<Reachability>(&circuit);
+
+        assert!(result.is_ok());
+        let reachable = result.unwrap();
+        assert_eq!(reachable.len(), 1);
+        assert!(reachable.contains(&gate.id()));
+    }
+
+    #[test]
+    fn complex_circuit_all_reachable() {
+        // Layout:
+        // input1 -> negate1 -> \
+        //                        addition -> output
+        // input2 -> negate2 -> /
+
+        let mut builder: Builder<TestGate> = Builder::new();
+        let input1 = builder.add_input();
+        let input2 = builder.add_input();
+        let negate1 = builder.add_gate(TestGate::Negate);
+        let negate2 = builder.add_gate(TestGate::Negate);
+        let addition = builder.add_gate(TestGate::Addition);
+        let output = builder.add_output();
+
+        builder.connect_input_to_gate(input1, negate1).unwrap();
+        builder.connect_input_to_gate(input2, negate2).unwrap();
+        builder.connect_gate_to_gate(negate1, addition).unwrap();
+        builder.connect_gate_to_gate(negate2, addition).unwrap();
+        builder.connect_gate_to_output(addition, output).unwrap();
+
+        let circuit = builder.finalize().unwrap();
+        let mut analyzer = Analyzer::new();
+        let result = analyzer.get::<Reachability>(&circuit);
+
+        assert!(result.is_ok());
+        let reachable = result.unwrap();
+        assert_eq!(reachable.len(), 3);
+        assert!(reachable.contains(&negate1.id()));
+        assert!(reachable.contains(&negate2.id()));
+        assert!(reachable.contains(&addition.id()));
+    }
+
+    #[test]
+    fn unreachable_from_inputs() {
+        // Manually construct a circuit where negate2 is not reachable from inputs.
+        //
+        // input -> negate1 -> addition -> output
+        //          negate2 -/
+
+        let negate1_gate = TestGate::Negate;
+        let negate2_gate = TestGate::Negate;
+        let addition_gate = TestGate::Addition;
+
+        let circuit_input = Input::new(0);
+
+        let circuit = Circuit {
+            gate_entries: vec![
+                (negate1_gate, vec![Source::Input(circuit_input)]),
+                (
+                    negate2_gate,
+                    vec![Source::Input(Input::new(999))], // Unreachable: depends on non-existent input
+                ),
+                (
+                    addition_gate,
+                    vec![
+                        Source::Gate(Operation::new(0)), // negate1
+                        Source::Gate(Operation::new(1)), // negate2
+                    ],
+                ),
+            ],
+            input_count: 1,
+            connected_outputs: vec![Operation::new(2)], // addition
+        };
+
+        let mut analyzer = Analyzer::new();
+        let result = analyzer.get::<Reachability>(&circuit);
+
+        assert!(result.is_ok());
+        let reachable = result.unwrap();
+        assert_eq!(reachable.len(), 2);
+        assert!(reachable.contains(&0));
+        assert!(reachable.contains(&2));
+        assert!(!reachable.contains(&1));
+    }
+
+    #[test]
+    fn unreachable_from_outputs() {
+        // Layout:
+        //
+        // input -> negate1 -> negate2 (no output connection)
+        //       \-> addition -> output
+
+        let mut builder: Builder<TestGate> = Builder::new();
+        let input1 = builder.add_input();
+        let input2 = builder.add_input();
+        let negate1 = builder.add_gate(TestGate::Negate);
+        let negate2 = builder.add_gate(TestGate::Negate);
+        let addition = builder.add_gate(TestGate::Addition);
+        let output = builder.add_output();
+
+        builder.connect_input_to_gate(input1, negate1).unwrap();
+        builder.connect_gate_to_gate(negate1, negate2).unwrap();
+        builder.connect_input_to_gate(input1, addition).unwrap();
+        builder.connect_input_to_gate(input2, addition).unwrap();
+        builder.connect_gate_to_output(addition, output).unwrap();
+
+        let circuit = builder.finalize().unwrap();
+        let mut analyzer = Analyzer::new();
+        let result = analyzer.get::<Reachability>(&circuit);
+
+        assert!(result.is_ok());
+        let reachable = result.unwrap();
+        assert_eq!(reachable.len(), 1);
+        assert!(reachable.contains(&addition.id()));
+        assert!(!reachable.contains(&negate1.id()));
+        assert!(!reachable.contains(&negate2.id()));
+    }
+
+    #[test]
+    fn multiple_outputs() {
+        // Layout:
+        //
+        // input -> negate1 -> output1
+        //       \-> negate2 -> output2
+
+        let mut builder: Builder<TestGate> = Builder::new();
+        let input = builder.add_input();
+        let negate1 = builder.add_gate(TestGate::Negate);
+        let negate2 = builder.add_gate(TestGate::Negate);
+        let output1 = builder.add_output();
+        let output2 = builder.add_output();
+
+        builder.connect_input_to_gate(input, negate1).unwrap();
+        builder.connect_gate_to_output(negate1, output1).unwrap();
+        builder.connect_gate_to_gate(negate1, negate2).unwrap();
+        builder.connect_gate_to_output(negate2, output2).unwrap();
+
+        let circuit = builder.finalize().unwrap();
+        let mut analyzer = Analyzer::new();
+        let result = analyzer.get::<Reachability>(&circuit);
+
+        assert!(result.is_ok());
+        let reachable = result.unwrap();
+        assert_eq!(reachable.len(), 2);
+        assert!(reachable.contains(&negate1.id()));
+        assert!(reachable.contains(&negate2.id()));
+    }
+
+    #[test]
+    fn diamond_pattern() {
+        // Layout:
+        //
+        // input -> negate1 -> \
+        //      \-> negate2 -> / -> addition -> output
+
+        let mut builder: Builder<TestGate> = Builder::new();
+        let input = builder.add_input();
+        let negate1 = builder.add_gate(TestGate::Negate);
+        let negate2 = builder.add_gate(TestGate::Negate);
+        let addition = builder.add_gate(TestGate::Addition);
+        let output = builder.add_output();
+
+        builder.connect_input_to_gate(input, negate1).unwrap();
+        builder.connect_input_to_gate(input, negate2).unwrap();
+        builder.connect_gate_to_gate(negate1, addition).unwrap();
+        builder.connect_gate_to_gate(negate2, addition).unwrap();
+        builder.connect_gate_to_output(addition, output).unwrap();
+
+        let circuit = builder.finalize().unwrap();
+        let mut analyzer = Analyzer::new();
+        let result = analyzer.get::<Reachability>(&circuit);
+
+        assert!(result.is_ok());
+        let reachable = result.unwrap();
+        assert_eq!(reachable.len(), 3);
+        assert!(reachable.contains(&negate1.id()));
+        assert!(reachable.contains(&negate2.id()));
+        assert!(reachable.contains(&addition.id()));
+    }
+}
