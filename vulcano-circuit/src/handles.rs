@@ -93,3 +93,15 @@ impl Wire {
         self.id
     }
 }
+
+/// Represents a source of data for a gate input.
+///
+/// A [`Source`] can be either a circuit input or the output of another gate.
+/// This is the primary way dependencies between gates are represented in the IR.
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub enum Source {
+    /// The value comes from a circuit input slot.
+    Input(Input),
+    /// The value comes from another gate's output.
+    Gate(Operation),
+}

@@ -1,12 +1,6 @@
 use crate::{
     gate::Gate,
-    graph::{
-        analyzer::Analyzer,
-        builder::Builder,
-        circuit::{Circuit, Use},
-        optimizer::passes::dead::dead_gate_elimination,
-    },
-    handles::Wire,
+    graph::{analyzer::Analyzer, builder::Builder, optimizer::passes::dead::dead_gate_elimination},
 };
 
 enum TestGate {
@@ -123,39 +117,32 @@ fn dead_code_unreachable_from_inputs() {
     // Circuit with gates not reachable from inputs.
     // Manually constructed to have unreachable gates.
 
+    use crate::graph::circuit::Circuit;
+    use crate::handles::{Input, Operation, Source};
+
     let negate1_gate = TestGate::Negate;
     let negate2_gate = TestGate::Negate;
     let addition_gate = TestGate::Addition;
 
-    let wire_input = Wire::new(0);
-    let wire_negate1_out = Wire::new(1);
-    let wire_negate2_out = Wire::new(2);
-    let wire_addition_out = Wire::new(3);
+    let circuit_input = Input::new(0);
 
     let circuit = Circuit {
         gate_entries: vec![
-            (
-                negate1_gate,
-                vec![Use::Consume(wire_input)],
-                wire_negate1_out,
-            ),
+            (negate1_gate, vec![Source::Input(circuit_input)]),
             (
                 negate2_gate,
-                vec![Use::Consume(Wire::new(999))],
-                wire_negate2_out,
+                vec![Source::Input(Input::new(999))], // Unreachable: non-existent input
             ),
             (
                 addition_gate,
                 vec![
-                    Use::Consume(wire_negate1_out),
-                    Use::Consume(wire_negate2_out),
+                    Source::Gate(Operation::new(0)), // negate1
+                    Source::Gate(Operation::new(1)), // negate2
                 ],
-                wire_addition_out,
             ),
         ],
-        connected_inputs: vec![wire_input],
-        connected_outputs: vec![wire_addition_out],
-        wire_count: 5,
+        input_count: 1,
+        connected_outputs: vec![Operation::new(2)], // addition
     };
 
     let gate_count_before = circuit.gate_entries.len();
@@ -169,7 +156,7 @@ fn dead_code_unreachable_from_inputs() {
     let names: Vec<&str> = optimized
         .gate_entries
         .iter()
-        .map(|(g, _, _)| g.name())
+        .map(|(g, _)| g.name())
         .collect();
     assert!(names.contains(&"Negate"));
     assert!(names.contains(&"Addition"));
@@ -281,7 +268,7 @@ fn dead_code_complex_circuit_with_dead_branches() {
     let names: Vec<&str> = optimized
         .gate_entries
         .iter()
-        .map(|(g, _, _)| g.name())
+        .map(|(g, _)| g.name())
         .collect();
     assert!(names.contains(&"Negate"));
     assert!(names.contains(&"Addition"));
@@ -335,14 +322,14 @@ fn dead_code_preserves_circuit_structure() {
 
     let circuit = builder.finalize().unwrap();
 
-    let input_count = circuit.connected_inputs.len();
+    let input_count = circuit.input_count;
     let output_count = circuit.connected_outputs.len();
 
     let mut analyzer = Analyzer::new();
     let (optimized, _) = dead_gate_elimination(circuit, &mut analyzer).unwrap();
 
     // Verify inputs and outputs are preserved.
-    assert_eq!(optimized.connected_inputs.len(), input_count);
+    assert_eq!(optimized.input_count, input_count);
     assert_eq!(optimized.connected_outputs.len(), output_count);
 
     // Only the live gate remains.

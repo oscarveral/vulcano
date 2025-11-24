@@ -2,16 +2,16 @@
 //! This module provides functionality to compute a topological
 //! ordering of the gates in a circuit, detecting cycles if present.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 
 use crate::{
     error::{Error, Result},
     gate::Gate,
     graph::{
         analyzer::{Analysis, Analyzer},
-        circuit::{Circuit, Use},
+        circuit::Circuit,
     },
-    handles::Operation,
+    handles::{Operation, Source},
 };
 
 /// Analysis that computes a topological ordering of the gates in a circuit.
@@ -23,25 +23,21 @@ impl Analysis for TopologicalOrder {
     fn run<T: Gate>(circuit: &Circuit<T>, _analyzer: &mut Analyzer<T>) -> Result<Self::Output> {
         let n = circuit.gate_entries.len();
 
-        // Map each wire id that is an output of a gate to that gate index.
-        let mut wire_to_gate: HashMap<usize, usize> = HashMap::with_capacity(n);
-        for (i, entry) in circuit.gate_entries.iter().enumerate() {
-            let wire_id = entry.2.id();
-            wire_to_gate.insert(wire_id, i);
-        }
-
-        // Build adjacency list (edge: src -> dst) and indegree counts.
+        // Build adjacency list (edge: src -> dst) and indegree counts by
+        // directly traversing Source dependencies.
         let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n];
         let mut indeg: Vec<usize> = vec![0; n];
-        for (dst, indegree) in indeg.iter_mut().enumerate() {
-            let uses = &circuit.gate_entries[dst].1;
-            for u in uses.iter() {
-                match u {
-                    Use::Read(w) | Use::Consume(w) => {
-                        if let Some(&src) = wire_to_gate.get(&w.id()) {
-                            adj[src].push(dst);
-                            *indegree += 1;
-                        }
+
+        for (dst, (_, sources)) in circuit.gate_entries.iter().enumerate() {
+            for source in sources.iter() {
+                match source {
+                    Source::Input(_) => {
+                        // External inputs contribute no dependency edges
+                    }
+                    Source::Gate(op) => {
+                        let src = op.id();
+                        adj[src].push(dst);
+                        indeg[dst] += 1;
                     }
                 }
             }

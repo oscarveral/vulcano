@@ -12,19 +12,9 @@ mod tests;
 use crate::{
     error::{Error, Result},
     gate::Gate,
-    graph::circuit::{Circuit, Use},
-    handles::{Input, Operation, Output, Wire},
+    graph::circuit::Circuit,
+    handles::{Input, Operation, Output, Source},
 };
-
-/// A source that can feed a gate input: either an `Input` slot or the
-/// output of another gate (`Operation`).
-#[derive(PartialEq, Eq, Debug)]
-enum Source {
-    /// The value comes from a circuit input slot.
-    Input(Input),
-    /// The value comes from another gate's output.
-    Gate(Operation),
-}
 
 /// Incremental builder for a circuit.
 ///
@@ -253,75 +243,30 @@ impl<T: Gate> Builder<T> {
     ///
     /// This consumes the builder and performs the following steps:
     /// 1. Validate local invariants.
-    /// 2. Assign deterministic `Wire` handles to external inputs (by
-    ///    ascending input index).
-    /// 3. For each gate (in creation order) map its recorded
-    ///    `Source`s to `Wire`s. External inputs use the wires from
-    ///    step (2); producer gate outputs are allocated lazily on
-    ///    first use.
-    /// 4. Collect per-gate `(gate, inputs, output_wire)` entries and
-    ///    produce the final `Circuit` value.
+    /// 2. Collect gate entries with their `Source` dependencies directly.
     ///
     /// Guarantees and notes:
     /// - The per-gate input ordering is preserved: each gate's
     ///   `Vec<Source>` is used as the canonical input order.
-    /// - Input wires are assigned deterministically by input index,
-    ///   so identical builder contents produce stable wire ids.
-    ///   This should not be relied upon as it may be changed or optimized
-    ///   in the optimizer phase.
     ///
     /// Returns a [`Circuit`] on success or an appropriate
     /// [`Error`] if validation fails.
     pub fn finalize(self) -> Result<Circuit<T>> {
         self.validate()?;
 
-        let mut wire_count: usize = self.connected_inputs.len();
+        let gate_entries = self.gate_entries;
+        let input_count = self.connected_inputs.len();
 
-        let input_wires: Vec<Wire> = (0..self.connected_inputs.len()).map(Wire::new).collect();
-
-        let mut gate_wires: Vec<Option<Wire>> = vec![None; self.gate_entries.len()];
-
-        let mut obtain_wire = |index: usize| -> Wire {
-            if let Some(w) = gate_wires[index] {
-                w
-            } else {
-                let w = Wire::new(wire_count);
-                wire_count += 1;
-                gate_wires[index] = Some(w);
-                w
+        let mut connected_outputs: Vec<Operation> =
+            Vec::with_capacity(self.connected_outputs.len());
+        for (i, opt) in self.connected_outputs.into_iter().enumerate() {
+            match opt {
+                Some(op) => connected_outputs.push(op),
+                None => return Err(Error::UnusedOutput(Output::new(i))),
             }
-        };
-
-        let mut entries: Vec<(T, Vec<Use>, Wire)> = Vec::with_capacity(self.gate_entries.len());
-
-        for (idx, (gate, sources)) in self.gate_entries.into_iter().enumerate() {
-            let gate_wire = obtain_wire(idx);
-            let mut gate_inputs: Vec<Use> = Vec::with_capacity(sources.len());
-            for source in sources {
-                match source {
-                    Source::Input(input) => {
-                        let input_wire = input_wires[input.id()];
-                        gate_inputs.push(Use::Read(input_wire));
-                    }
-                    Source::Gate(op) => {
-                        let src_wire = obtain_wire(op.id());
-                        gate_inputs.push(Use::Read(src_wire));
-                    }
-                }
-            }
-            entries.push((gate, gate_inputs, gate_wire));
         }
 
-        let output_wires: Vec<Wire> = self
-            .connected_outputs
-            .into_iter()
-            .map(|opt| match opt {
-                Some(op) => obtain_wire(op.id()),
-                None => unreachable!(),
-            })
-            .collect();
-
-        Ok(Circuit::new(entries, input_wires, output_wires, wire_count))
+        Ok(Circuit::new(gate_entries, input_count, connected_outputs))
     }
 }
 

@@ -152,7 +152,7 @@ fn preserves_circuit_structure() {
     builder.connect_gate_to_output(gate2, output2).unwrap();
 
     let circuit = builder.finalize().unwrap();
-    let input_count = circuit.connected_inputs.len();
+    let input_count = circuit.input_count;
     let output_count = circuit.connected_outputs.len();
     let gate_count = circuit.gate_entries.len();
 
@@ -161,7 +161,7 @@ fn preserves_circuit_structure() {
 
     let optimized = optimizer.optimize(circuit).unwrap();
 
-    assert_eq!(optimized.connected_inputs.len(), input_count);
+    assert_eq!(optimized.input_count, input_count);
     assert_eq!(optimized.connected_outputs.len(), output_count);
     assert_eq!(optimized.gate_entries.len(), gate_count);
 }
