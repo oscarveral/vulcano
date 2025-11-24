@@ -107,10 +107,14 @@ impl Analysis for Reachability {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::{
-        graph::{analyzer::Analyzer, builder::Builder, circuit::Circuit},
-        handles::{Input, Operation},
+        gate::Gate,
+        graph::{
+            analyzer::{Analyzer, analyses::reachability::Reachability},
+            builder::Builder,
+            circuit::Circuit,
+        },
+        handles::{Input, Operation, Source},
     };
 
     enum TestGate {

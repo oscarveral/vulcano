@@ -84,10 +84,15 @@ impl Analysis for TopologicalOrder {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::{
         error::Error,
-        graph::{analyzer::Analyzer, builder::Builder, circuit::Circuit},
+        gate::Gate,
+        graph::{
+            analyzer::{Analyzer, analyses::topological::TopologicalOrder},
+            builder::Builder,
+            circuit::Circuit,
+        },
+        handles::{Operation, Source},
     };
 
     enum TestGate {
