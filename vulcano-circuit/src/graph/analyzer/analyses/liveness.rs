@@ -92,8 +92,7 @@ impl Analysis for LivenessAnalysis {
 
         // Initialize live ranges for operations.
         // Start time is when the operation executes in topological order.
-        for (step_idx, &gate_idx) in topo_order.iter().enumerate() {
-            let op = Operation::new(gate_idx);
+        for (step_idx, &op) in topo_order.iter().enumerate() {
             operation_ranges.insert(
                 op,
                 LiveRange {
@@ -114,8 +113,8 @@ impl Analysis for LivenessAnalysis {
 
         // Extend live ranges based on uses.
         // Scan through gates in topological order and extend ranges to cover uses.
-        for (step_idx, &gate_idx) in topo_order.iter().enumerate() {
-            let (_, sources) = &circuit.gate_entries[gate_idx];
+        for (step_idx, &op) in topo_order.iter().enumerate() {
+            let (_, sources) = &circuit.gate_entries[op.id()];
 
             for source in sources {
                 match source {

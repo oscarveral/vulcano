@@ -7,6 +7,7 @@ use crate::{
         analyzer::{Analyzer, analyses::reachability::Reachability},
         circuit::Circuit,
     },
+    handles::Operation,
 };
 
 /// Optimization pass that eliminates dead gates from the circuit.
@@ -26,7 +27,7 @@ pub fn dead_gate_elimination<T: Gate>(
         .gate_entries
         .into_iter()
         .enumerate()
-        .filter(|(idx, _)| reachable_gates.contains(idx))
+        .filter(|(idx, _)| reachable_gates.contains(&Operation::new(*idx)))
         .map(|(_, entry)| entry)
         .collect();
 

@@ -13,7 +13,7 @@ use crate::{
         analyzer::{Analysis, Analyzer},
         circuit::Circuit,
     },
-    handles::Source,
+    handles::{Operation, Source},
 };
 
 /// Analysis that computes which gates are reachable in the circuit.
@@ -26,8 +26,8 @@ use crate::{
 pub struct Reachability;
 
 impl Analysis for Reachability {
-    /// Set of gate indices that are reachable.
-    type Output = HashSet<usize>;
+    /// Set of operations that are reachable.
+    type Output = HashSet<Operation>;
 
     fn run<T: Gate>(circuit: &Circuit<T>, _analyzer: &mut Analyzer<T>) -> Result<Self::Output> {
         // Step 1: Forward reachability - BFS from inputs.
@@ -96,9 +96,9 @@ impl Analysis for Reachability {
         }
 
         // Step 3: Intersection - gates must be reachable both ways.
-        let reachable: HashSet<usize> = forward_reachable
+        let reachable: HashSet<Operation> = forward_reachable
             .intersection(&backward_reachable)
-            .copied()
+            .map(|&idx| Operation::new(idx))
             .collect();
 
         Ok(reachable)
@@ -157,7 +157,7 @@ mod tests {
         assert!(result.is_ok());
         let reachable = result.unwrap();
         assert_eq!(reachable.len(), 1);
-        assert!(reachable.contains(&gate.id()));
+        assert!(reachable.contains(&gate));
     }
 
     #[test]
@@ -188,9 +188,9 @@ mod tests {
         assert!(result.is_ok());
         let reachable = result.unwrap();
         assert_eq!(reachable.len(), 3);
-        assert!(reachable.contains(&negate1.id()));
-        assert!(reachable.contains(&negate2.id()));
-        assert!(reachable.contains(&addition.id()));
+        assert!(reachable.contains(&negate1));
+        assert!(reachable.contains(&negate2));
+        assert!(reachable.contains(&addition));
     }
 
     #[test]
@@ -231,9 +231,9 @@ mod tests {
         assert!(result.is_ok());
         let reachable = result.unwrap();
         assert_eq!(reachable.len(), 2);
-        assert!(reachable.contains(&0));
-        assert!(reachable.contains(&2));
-        assert!(!reachable.contains(&1));
+        assert!(reachable.contains(&Operation::new(0)));
+        assert!(reachable.contains(&Operation::new(2)));
+        assert!(!reachable.contains(&Operation::new(1)));
     }
 
     #[test]
@@ -264,9 +264,9 @@ mod tests {
         assert!(result.is_ok());
         let reachable = result.unwrap();
         assert_eq!(reachable.len(), 1);
-        assert!(reachable.contains(&addition.id()));
-        assert!(!reachable.contains(&negate1.id()));
-        assert!(!reachable.contains(&negate2.id()));
+        assert!(reachable.contains(&addition));
+        assert!(!reachable.contains(&negate1));
+        assert!(!reachable.contains(&negate2));
     }
 
     #[test]
@@ -295,8 +295,8 @@ mod tests {
         assert!(result.is_ok());
         let reachable = result.unwrap();
         assert_eq!(reachable.len(), 2);
-        assert!(reachable.contains(&negate1.id()));
-        assert!(reachable.contains(&negate2.id()));
+        assert!(reachable.contains(&negate1));
+        assert!(reachable.contains(&negate2));
     }
 
     #[test]
@@ -326,8 +326,8 @@ mod tests {
         assert!(result.is_ok());
         let reachable = result.unwrap();
         assert_eq!(reachable.len(), 3);
-        assert!(reachable.contains(&negate1.id()));
-        assert!(reachable.contains(&negate2.id()));
-        assert!(reachable.contains(&addition.id()));
+        assert!(reachable.contains(&negate1));
+        assert!(reachable.contains(&negate2));
+        assert!(reachable.contains(&addition));
     }
 }

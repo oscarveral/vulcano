@@ -18,7 +18,7 @@ use crate::{
 pub struct TopologicalOrder;
 
 impl Analysis for TopologicalOrder {
-    type Output = Vec<usize>;
+    type Output = Vec<Operation>;
 
     fn run<T: Gate>(circuit: &Circuit<T>, _analyzer: &mut Analyzer<T>) -> Result<Self::Output> {
         let n = circuit.gate_entries.len();
@@ -78,7 +78,8 @@ impl Analysis for TopologicalOrder {
             return Err(Error::CycleDetected(cycle_ops));
         }
 
-        Ok(topo)
+        // Convert indices to Operation handles.
+        Ok(topo.into_iter().map(Operation::new).collect())
     }
 }
 
@@ -138,7 +139,7 @@ mod tests {
         assert!(result.is_ok());
         let topo = result.unwrap();
         assert_eq!(topo.len(), 1);
-        assert_eq!(topo[0], gate.id());
+        assert_eq!(topo[0], gate);
     }
 
     #[test]
@@ -164,9 +165,9 @@ mod tests {
         assert!(result.is_ok());
         let topo = result.unwrap();
         assert_eq!(topo.len(), 3);
-        let pos1 = topo.iter().position(|&x| x == negate1.id()).unwrap();
-        let pos2 = topo.iter().position(|&x| x == negate2.id()).unwrap();
-        let pos3 = topo.iter().position(|&x| x == negate3.id()).unwrap();
+        let pos1 = topo.iter().position(|&x| x == negate1).unwrap();
+        let pos2 = topo.iter().position(|&x| x == negate2).unwrap();
+        let pos3 = topo.iter().position(|&x| x == negate3).unwrap();
         assert!(pos1 < pos2);
         assert!(pos2 < pos3);
     }
@@ -200,9 +201,9 @@ mod tests {
         assert!(result.is_ok());
         let topo = result.unwrap();
         assert_eq!(topo.len(), 3);
-        let pos1 = topo.iter().position(|&x| x == negate1.id()).unwrap();
-        let pos2 = topo.iter().position(|&x| x == negate2.id()).unwrap();
-        let pos_add = topo.iter().position(|&x| x == addition.id()).unwrap();
+        let pos1 = topo.iter().position(|&x| x == negate1).unwrap();
+        let pos2 = topo.iter().position(|&x| x == negate2).unwrap();
+        let pos_add = topo.iter().position(|&x| x == addition).unwrap();
         assert!(pos1 < pos_add);
         assert!(pos2 < pos_add);
     }
@@ -234,9 +235,9 @@ mod tests {
         assert!(result.is_ok());
         let topo = result.unwrap();
         assert_eq!(topo.len(), 3);
-        let pos1 = topo.iter().position(|&x| x == negate1.id()).unwrap();
-        let pos2 = topo.iter().position(|&x| x == negate2.id()).unwrap();
-        let pos_add = topo.iter().position(|&x| x == addition.id()).unwrap();
+        let pos1 = topo.iter().position(|&x| x == negate1).unwrap();
+        let pos2 = topo.iter().position(|&x| x == negate2).unwrap();
+        let pos_add = topo.iter().position(|&x| x == addition).unwrap();
         assert!(pos1 < pos_add);
         assert!(pos2 < pos_add);
     }
@@ -267,8 +268,8 @@ mod tests {
         assert!(result.is_ok());
         let topo = result.unwrap();
         assert_eq!(topo.len(), 2);
-        let pos1 = topo.iter().position(|&x| x == negate1.id()).unwrap();
-        let pos2 = topo.iter().position(|&x| x == negate2.id()).unwrap();
+        let pos1 = topo.iter().position(|&x| x == negate1).unwrap();
+        let pos2 = topo.iter().position(|&x| x == negate2).unwrap();
         assert!(pos1 < pos2);
     }
 
@@ -362,10 +363,10 @@ mod tests {
         let topo = result.unwrap();
         assert_eq!(topo.len(), 4);
 
-        let pos_neg1 = topo.iter().position(|&x| x == negate1.id()).unwrap();
-        let pos_neg2 = topo.iter().position(|&x| x == negate2.id()).unwrap();
-        let pos_add = topo.iter().position(|&x| x == addition1.id()).unwrap();
-        let pos_rot = topo.iter().position(|&x| x == rotate.id()).unwrap();
+        let pos_neg1 = topo.iter().position(|&x| x == negate1).unwrap();
+        let pos_neg2 = topo.iter().position(|&x| x == negate2).unwrap();
+        let pos_add = topo.iter().position(|&x| x == addition1).unwrap();
+        let pos_rot = topo.iter().position(|&x| x == rotate).unwrap();
 
         assert!(pos_neg1 < pos_add);
         assert!(pos_neg2 < pos_add);
