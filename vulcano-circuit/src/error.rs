@@ -53,6 +53,14 @@ pub enum Error {
     AnalysisCacheTypeMismatch(TypeId),
     /// The analysis cache is missing an expected entry.
     AnalysisCacheMissingEntry(TypeId),
+    /// An operation was not found in liveness information.
+    LivenessOperationNotFound(Operation),
+    /// An input was not found in liveness information.
+    LivenessInputNotFound(Input),
+    /// An operation was not found in use count information.
+    UseCountOperationNotFound(Operation),
+    /// An input was not found in use count information.
+    UseCountInputNotFound(Input),
 }
 
 impl std::fmt::Display for Error {
@@ -90,6 +98,18 @@ impl std::fmt::Display for Error {
             Error::AnalysisCacheMissingEntry(type_id) => {
                 write!(f, "Analysis cache missing entry for TypeId {:?}", type_id)
             }
+            Error::LivenessOperationNotFound(op) => {
+                write!(f, "Operation {:?} not found in liveness information", op)
+            }
+            Error::LivenessInputNotFound(input) => {
+                write!(f, "Input {:?} not found in liveness information", input)
+            }
+            Error::UseCountOperationNotFound(op) => {
+                write!(f, "Operation {:?} not found in use count information", op)
+            }
+            Error::UseCountInputNotFound(input) => {
+                write!(f, "Input {:?} not found in use count information", input)
+            }
         }
     }
 }
@@ -116,6 +136,18 @@ impl std::fmt::Debug for Error {
             }
             Error::AnalysisCacheMissingEntry(type_id) => {
                 write!(f, "AnalysisCacheMissingEntry({:?})", type_id)
+            }
+            Error::LivenessOperationNotFound(op) => {
+                write!(f, "LivenessOperationNotFound({:?})", op)
+            }
+            Error::LivenessInputNotFound(input) => {
+                write!(f, "LivenessInputNotFound({:?})", input)
+            }
+            Error::UseCountOperationNotFound(op) => {
+                write!(f, "UseCountOperationNotFound({:?})", op)
+            }
+            Error::UseCountInputNotFound(input) => {
+                write!(f, "UseCountInputNotFound({:?})", input)
             }
         }
     }

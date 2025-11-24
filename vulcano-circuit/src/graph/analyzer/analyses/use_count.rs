@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    error::Result,
+    error::{Error, Result},
     gate::Gate,
     graph::{
         analyzer::{Analysis, Analyzer},
@@ -40,26 +40,32 @@ pub struct UseCountInfo {
 impl UseCountInfo {
     /// Get the use count for an operation.
     ///
-    /// Returns 0 if the operation is not used anywhere.
-    pub fn operation_use_count(&self, op: &Operation) -> usize {
-        self.operation_uses.get(op).copied().unwrap_or(0)
+    /// Returns an error if the operation is not found.
+    pub fn operation_use_count(&self, op: &Operation) -> Result<usize> {
+        self.operation_uses
+            .get(op)
+            .copied()
+            .ok_or(Error::UseCountOperationNotFound(*op))
     }
 
     /// Get the use count for an input.
     ///
-    /// Returns 0 if the input is not used anywhere.
-    pub fn input_use_count(&self, input: &Input) -> usize {
-        self.input_uses.get(input).copied().unwrap_or(0)
+    /// Returns an error if the input is not found.
+    pub fn input_use_count(&self, input: &Input) -> Result<usize> {
+        self.input_uses
+            .get(input)
+            .copied()
+            .ok_or(Error::UseCountInputNotFound(*input))
     }
 
     /// Check if an operation's output is used at least once.
-    pub fn is_operation_used(&self, op: &Operation) -> bool {
-        self.operation_use_count(op) > 0
+    pub fn is_operation_used(&self, op: &Operation) -> Result<bool> {
+        Ok(self.operation_use_count(op)? > 0)
     }
 
     /// Check if an input is used at least once.
-    pub fn is_input_used(&self, input: &Input) -> bool {
-        self.input_use_count(input) > 0
+    pub fn is_input_used(&self, input: &Input) -> Result<bool> {
+        Ok(self.input_use_count(input)? > 0)
     }
 }
 
@@ -162,18 +168,27 @@ mod tests {
         let use_counts = analyzer.get::<UseCountAnalysis>(&circuit).unwrap();
 
         // Check input use counts.
-        assert_eq!(use_counts.input_use_count(&Input::new(0)), 1);
-        assert_eq!(use_counts.input_use_count(&Input::new(1)), 1);
+        assert_eq!(use_counts.input_use_count(&Input::new(0)).unwrap(), 1);
+        assert_eq!(use_counts.input_use_count(&Input::new(1)).unwrap(), 1);
 
         // Check operation use counts.
-        assert_eq!(use_counts.operation_use_count(&Operation::new(0)), 1);
-        assert_eq!(use_counts.operation_use_count(&Operation::new(1)), 1);
-        assert_eq!(use_counts.operation_use_count(&Operation::new(2)), 1);
+        assert_eq!(
+            use_counts.operation_use_count(&Operation::new(0)).unwrap(),
+            1
+        );
+        assert_eq!(
+            use_counts.operation_use_count(&Operation::new(1)).unwrap(),
+            1
+        );
+        assert_eq!(
+            use_counts.operation_use_count(&Operation::new(2)).unwrap(),
+            1
+        );
 
         // Check that all are used.
-        assert!(use_counts.is_operation_used(&Operation::new(0)));
-        assert!(use_counts.is_operation_used(&Operation::new(1)));
-        assert!(use_counts.is_operation_used(&Operation::new(2)));
+        assert!(use_counts.is_operation_used(&Operation::new(0)).unwrap());
+        assert!(use_counts.is_operation_used(&Operation::new(1)).unwrap());
+        assert!(use_counts.is_operation_used(&Operation::new(2)).unwrap());
     }
 
     #[test]
@@ -204,13 +219,19 @@ mod tests {
         let use_counts = analyzer.get::<UseCountAnalysis>(&circuit).unwrap();
 
         // input0 is used 3 times total (twice in Add, once in Mul).
-        assert_eq!(use_counts.input_use_count(&Input::new(0)), 3);
+        assert_eq!(use_counts.input_use_count(&Input::new(0)).unwrap(), 3);
 
         // gate0 is used once (by Mul).
-        assert_eq!(use_counts.operation_use_count(&Operation::new(0)), 1);
+        assert_eq!(
+            use_counts.operation_use_count(&Operation::new(0)).unwrap(),
+            1
+        );
 
         // gate1 is used once (by output).
-        assert_eq!(use_counts.operation_use_count(&Operation::new(1)), 1);
+        assert_eq!(
+            use_counts.operation_use_count(&Operation::new(1)).unwrap(),
+            1
+        );
     }
 
     #[test]
@@ -231,6 +252,9 @@ mod tests {
         let use_counts = analyzer.get::<UseCountAnalysis>(&circuit).unwrap();
 
         // Gate 0 is used twice (by both outputs).
-        assert_eq!(use_counts.operation_use_count(&Operation::new(0)), 2);
+        assert_eq!(
+            use_counts.operation_use_count(&Operation::new(0)).unwrap(),
+            2
+        );
     }
 }

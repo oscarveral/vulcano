@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    error::Result,
+    error::{Error, Result},
     gate::Gate,
     graph::{
         analyzer::{
@@ -59,23 +59,30 @@ pub struct LivenessInfo {
 
 impl LivenessInfo {
     /// Get the live range for an operation's output.
-    pub fn operation_range(&self, op: &Operation) -> Option<&LiveRange> {
-        self.operation_ranges.get(op)
+    ///
+    /// Returns an error if the operation is not present in the liveness information.
+    pub fn operation_range(&self, op: &Operation) -> Result<&LiveRange> {
+        self.operation_ranges
+            .get(op)
+            .ok_or(Error::LivenessOperationNotFound(*op))
     }
 
     /// Get the live range for a circuit input.
-    pub fn input_range(&self, input: &Input) -> Option<&LiveRange> {
-        self.input_ranges.get(input)
+    ///
+    /// Returns an error if the input is not present in the liveness information.
+    pub fn input_range(&self, input: &Input) -> Result<&LiveRange> {
+        self.input_ranges
+            .get(input)
+            .ok_or(Error::LivenessInputNotFound(*input))
     }
 
     /// Check if two operations' outputs have overlapping live ranges.
-    pub fn operations_overlap(&self, op1: &Operation, op2: &Operation) -> bool {
-        if let (Some(range1), Some(range2)) = (self.operation_range(op1), self.operation_range(op2))
-        {
-            range1.overlaps(range2)
-        } else {
-            false
-        }
+    ///
+    /// Returns an error if either operation is not present in the liveness information.
+    pub fn operations_overlap(&self, op1: &Operation, op2: &Operation) -> Result<bool> {
+        let range1 = self.operation_range(op1)?;
+        let range2 = self.operation_range(op2)?;
+        Ok(range1.overlaps(range2))
     }
 }
 
@@ -106,7 +113,7 @@ impl Analysis for LivenessAnalysis {
         // Inputs are "produced" at step 0 (before any gate executes).
         for input_idx in 0..circuit.input_count() {
             let input = Input::new(input_idx);
-            if use_counts.is_input_used(&input) {
+            if use_counts.is_input_used(&input)? {
                 input_ranges.insert(input, LiveRange { start: 0, end: 0 });
             }
         }
