@@ -12,7 +12,7 @@
 /// An [`Operation`] is a compact newtype-like wrapper around a numeric
 /// index. Use [`Operation`] when referring to the producer of a value
 /// (the gate).
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
 pub struct Operation {
     id: usize,
 }
@@ -34,7 +34,7 @@ impl Operation {
 /// An [`Input`] represents an externally-provided input value. It is used
 /// when wiring builders or when mapping runtime inputs into the
 /// execution plan.
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
 pub struct Input {
     id: usize,
 }
@@ -56,7 +56,7 @@ impl Input {
 /// An [`Output`] represents an externally-visible output value. It is used
 /// when wiring builders or when mapping runtime outputs from the
 /// execution plan.
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
 pub struct Output {
     id: usize,
 }
@@ -77,7 +77,7 @@ impl Output {
 ///
 /// A [`Wire`] represents a runtime storage location used to hold
 /// intermediate values produced and consumed by gates during execution.
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
 pub struct Wire {
     id: usize,
 }
