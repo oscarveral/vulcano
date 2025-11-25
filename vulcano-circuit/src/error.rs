@@ -61,6 +61,10 @@ pub enum Error {
     UseCountOperationNotFound(Operation),
     /// An input was not found in use count information.
     UseCountInputNotFound(Input),
+    /// A value was not assigned a wire color during wire allocation.
+    WireAllocationValueNotColored,
+    /// Failed to find an available wire color during allocation.
+    WireAllocationNoColorAvailable,
 }
 
 impl std::fmt::Display for Error {
@@ -110,6 +114,18 @@ impl std::fmt::Display for Error {
             Error::UseCountInputNotFound(input) => {
                 write!(f, "Input {:?} not found in use count information", input)
             }
+            Error::WireAllocationValueNotColored => {
+                write!(
+                    f,
+                    "A value was not assigned a wire color during wire allocation"
+                )
+            }
+            Error::WireAllocationNoColorAvailable => {
+                write!(
+                    f,
+                    "Failed to find an available wire color during allocation"
+                )
+            }
         }
     }
 }
@@ -148,6 +164,12 @@ impl std::fmt::Debug for Error {
             }
             Error::UseCountInputNotFound(input) => {
                 write!(f, "UseCountInputNotFound({:?})", input)
+            }
+            Error::WireAllocationValueNotColored => {
+                write!(f, "WireAllocationValueNotColored")
+            }
+            Error::WireAllocationNoColorAvailable => {
+                write!(f, "WireAllocationNoColorAvailable")
             }
         }
     }
