@@ -90,8 +90,8 @@ impl Analysis for LivenessAnalysis {
     type Output = LivenessInfo;
 
     fn run<T: Gate>(circuit: &Circuit<T>, analyzer: &mut Analyzer<T>) -> Result<Self::Output> {
-        // Clone the topological order to avoid borrow conflicts.
-        let topo_order = analyzer.get::<TopologicalOrder>(circuit)?.clone();
+        // No need to clone the topological order anymore as we get an Rc.
+        let topo_order = analyzer.get::<TopologicalOrder>(circuit)?;
         let use_counts = analyzer.get::<UseCountAnalysis>(circuit)?;
 
         let mut operation_ranges: HashMap<Operation, LiveRange> = HashMap::new();

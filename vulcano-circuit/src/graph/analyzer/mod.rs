@@ -19,6 +19,7 @@ use crate::{
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
+    rc::Rc,
 };
 
 /// Trait for analyses that can be performed on circuits.
@@ -32,7 +33,7 @@ pub trait Analysis: 'static {
 /// Struct that manages and caches analyses on circuits.
 pub struct Analyzer<T: Gate> {
     /// Cache mapping [`TypeId`] of analyses to their results.
-    cache: HashMap<TypeId, Box<dyn Any>>,
+    cache: HashMap<TypeId, Rc<dyn Any>>,
     /// Phantom data to associate with the gate type.
     _marker: std::marker::PhantomData<T>,
 }
@@ -47,7 +48,7 @@ impl<T: Gate> Analyzer<T> {
     }
 
     /// Get the result of an analysis, computing and caching it if necessary.
-    pub fn get<A>(&mut self, circuit: &Circuit<T>) -> Result<&A::Output>
+    pub fn get<A>(&mut self, circuit: &Circuit<T>) -> Result<Rc<A::Output>>
     where
         A: Analysis,
     {
@@ -58,19 +59,21 @@ impl<T: Gate> Analyzer<T> {
                 .cache
                 .get(&key)
                 .ok_or(Error::AnalysisCacheMissingEntry(key))?
-                .downcast_ref::<A::Output>()
-                .ok_or(Error::AnalysisCacheTypeMismatch(key));
+                .clone()
+                .downcast::<A::Output>()
+                .map_err(|_| Error::AnalysisCacheTypeMismatch(key));
         }
 
         let result = A::run(circuit, self)?;
 
-        self.cache.insert(key, Box::new(result));
+        self.cache.insert(key, Rc::new(result));
 
         self.cache
             .get(&key)
             .ok_or(Error::AnalysisCacheMissingEntry(key))?
-            .downcast_ref::<A::Output>()
-            .ok_or(Error::AnalysisCacheTypeMismatch(key))
+            .clone()
+            .downcast::<A::Output>()
+            .map_err(|_| Error::AnalysisCacheTypeMismatch(key))
     }
 
     /// Invalidate all cached analyses.
