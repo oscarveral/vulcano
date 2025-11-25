@@ -109,25 +109,26 @@ impl Analysis for LivenessAnalysis {
             );
         }
 
-        // Initialize live ranges for inputs.
-        // Inputs are "produced" at step 0 (before any gate executes).
-        for input in circuit.inputs() {
-            if use_counts.is_input_used(&input)? {
-                input_ranges.insert(input, LiveRange { start: 0, end: 0 });
-            }
-        }
-
-        // Extend live ranges based on uses.
-        // Scan through gates in topological order and extend ranges to cover uses.
+        // Scan through gates in topological order to build input live ranges and extend operation ranges.
         for (step_idx, &op) in topo_order.iter().enumerate() {
             let (_, sources) = &circuit.gate_entries[op.id()];
 
             for source in sources {
                 match source {
                     Source::Input(input) => {
-                        // Extend input's live range to this step.
-                        if let Some(range) = input_ranges.get_mut(input) {
-                            range.end = range.end.max(step_idx);
+                        // Track when input is first used and last used.
+                        if use_counts.is_input_used(input)? {
+                            input_ranges
+                                .entry(*input)
+                                .and_modify(|range| {
+                                    // Extend to cover this use.
+                                    range.end = range.end.max(step_idx);
+                                })
+                                .or_insert(LiveRange {
+                                    // First use - input becomes live here
+                                    start: step_idx,
+                                    end: step_idx,
+                                });
                         }
                     }
                     Source::Gate(producer_op) => {
@@ -139,10 +140,6 @@ impl Analysis for LivenessAnalysis {
                 }
             }
         }
-
-        // Note: Circuit outputs do not extend live ranges.
-        // Outputs can be returned immediately when the operation executes,
-        // so they don't need to keep the value alive more than necessary.
 
         Ok(LivenessInfo {
             operation_ranges,
