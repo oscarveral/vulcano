@@ -111,8 +111,7 @@ impl Analysis for LivenessAnalysis {
 
         // Initialize live ranges for inputs.
         // Inputs are "produced" at step 0 (before any gate executes).
-        for input_idx in 0..circuit.input_count() {
-            let input = Input::new(input_idx);
+        for input in circuit.inputs() {
             if use_counts.is_input_used(&input)? {
                 input_ranges.insert(input, LiveRange { start: 0, end: 0 });
             }

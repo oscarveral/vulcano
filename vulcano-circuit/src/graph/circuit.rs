@@ -13,7 +13,7 @@
 
 use crate::{
     gate::Gate,
-    handles::{Operation, Source},
+    handles::{Input, Operation, Output, Source},
 };
 
 /// Represents a computation circuit as a directed acyclic graph (DAG).
@@ -66,5 +66,29 @@ impl<T: Gate> Circuit<T> {
     /// Returns the number of circuit outputs.
     pub fn output_count(&self) -> usize {
         self.connected_outputs.len()
+    }
+
+    /// Returns an iterator over all circuit input handles.
+    ///
+    /// This is a convenience method that creates [`Input`] handles for all
+    /// inputs in the circuit (from 0 to `input_count - 1`).
+    pub fn inputs(&self) -> impl Iterator<Item = Input> {
+        (0..self.input_count).map(Input::new)
+    }
+
+    /// Returns an iterator over all operation handles in the circuit.
+    ///
+    /// This is a convenience method that creates [`Operation`] handles for all
+    /// gates in the circuit (from 0 to `gate_count - 1`).
+    pub fn operations(&self) -> impl Iterator<Item = Operation> {
+        (0..self.gate_count()).map(Operation::new)
+    }
+
+    /// Returns an iterator over all circuit output handles.
+    ///
+    /// This is a convenience method that creates [`Output`] handles for all
+    /// outputs in the circuit (from 0 to `output_count - 1`).
+    pub fn outputs(&self) -> impl Iterator<Item = Output> {
+        (0..self.output_count()).map(Output::new)
     }
 }
