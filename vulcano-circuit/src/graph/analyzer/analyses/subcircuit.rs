@@ -19,7 +19,7 @@ use crate::{
         analyzer::{Analysis, Analyzer},
         circuit::Circuit,
     },
-    handles::{Input, Operation, Source},
+    handles::{GateId, InputId, Value},
 };
 
 /// Analysis that computes sub-circuit connectivity information.
@@ -29,16 +29,16 @@ pub struct SubCircuitAnalysis;
 #[derive(Debug, Clone)]
 pub struct SubCircuitInfo {
     /// Sub-circuit ID for each operation.
-    operation_subcircuits: HashMap<Operation, usize>,
+    operation_subcircuits: HashMap<GateId, usize>,
     /// Sub-circuit ID for each input.
-    input_subcircuits: HashMap<Input, usize>,
+    input_subcircuits: HashMap<InputId, usize>,
     /// Total number of disjoint sub-circuits.
     pub subcircuit_count: usize,
 }
 
 impl SubCircuitInfo {
     /// Get the sub-circuit ID for an operation.
-    pub fn operation_subcircuit(&self, op: &Operation) -> Result<usize> {
+    pub fn operation_subcircuit(&self, op: &GateId) -> Result<usize> {
         self.operation_subcircuits
             .get(op)
             .copied()
@@ -46,7 +46,7 @@ impl SubCircuitInfo {
     }
 
     /// Get the sub-circuit ID for an input.
-    pub fn input_subcircuit(&self, input: &Input) -> Result<usize> {
+    pub fn input_subcircuit(&self, input: &InputId) -> Result<usize> {
         self.input_subcircuits
             .get(input)
             .copied()
@@ -54,21 +54,21 @@ impl SubCircuitInfo {
     }
 
     /// Check if two operations belong to the same sub-circuit.
-    pub fn same_subcircuit_ops(&self, op1: &Operation, op2: &Operation) -> Result<bool> {
+    pub fn same_subcircuit_ops(&self, op1: &GateId, op2: &GateId) -> Result<bool> {
         let id1 = self.operation_subcircuit(op1)?;
         let id2 = self.operation_subcircuit(op2)?;
         Ok(id1 == id2)
     }
 
     /// Check if an operation and input belong to the same sub-circuit.
-    pub fn same_subcircuit_op_input(&self, op: &Operation, input: &Input) -> Result<bool> {
+    pub fn same_subcircuit_op_input(&self, op: &GateId, input: &InputId) -> Result<bool> {
         let id1 = self.operation_subcircuit(op)?;
         let id2 = self.input_subcircuit(input)?;
         Ok(id1 == id2)
     }
 
     /// Check if two inputs belong to the same sub-circuit.
-    pub fn same_subcircuit_inputs(&self, input1: &Input, input2: &Input) -> Result<bool> {
+    pub fn same_subcircuit_inputs(&self, input1: &InputId, input2: &InputId) -> Result<bool> {
         let id1 = self.input_subcircuit(input1)?;
         let id2 = self.input_subcircuit(input2)?;
         Ok(id1 == id2)
@@ -84,11 +84,11 @@ impl Analysis for SubCircuitAnalysis {
 
         // Add all operations and inputs to the union-find structure.
         for op in circuit.operations() {
-            uf.make_set(Node::Operation(op));
+            uf.make_set(Value::Gate(op));
         }
 
         for input in circuit.inputs() {
-            uf.make_set(Node::Input(input));
+            uf.make_set(Value::Input(input));
         }
 
         // Union operations with their dependencies.
@@ -97,25 +97,25 @@ impl Analysis for SubCircuitAnalysis {
 
             for source in sources {
                 match source {
-                    Source::Input(input) => {
+                    Value::Input(input) => {
                         // Union operation with input.
-                        uf.union(Node::Operation(op), Node::Input(*input));
+                        uf.union(Value::Gate(op), Value::Input(*input));
                     }
-                    Source::Gate(producer_op) => {
+                    Value::Gate(producer_op) => {
                         // Union operation with producer operation.
-                        uf.union(Node::Operation(op), Node::Operation(*producer_op));
+                        uf.union(Value::Gate(op), Value::Gate(*producer_op));
                     }
                 }
             }
         }
 
         // Assign sub-circuit IDs based on connected components.
-        let mut subcircuit_map: HashMap<Node, usize> = HashMap::new();
+        let mut subcircuit_map: HashMap<Value, usize> = HashMap::new();
         let mut next_id = 0;
 
         // Process all nodes and assign IDs.
         for op in circuit.operations() {
-            let node = Node::Operation(op);
+            let node = Value::Gate(op);
             let root = uf.find(node);
 
             if let Entry::Vacant(e) = subcircuit_map.entry(root) {
@@ -125,7 +125,7 @@ impl Analysis for SubCircuitAnalysis {
         }
 
         for input in circuit.inputs() {
-            let node = Node::Input(input);
+            let node = Value::Input(input);
             let root = uf.find(node);
 
             if let Entry::Vacant(e) = subcircuit_map.entry(root) {
@@ -139,14 +139,14 @@ impl Analysis for SubCircuitAnalysis {
         let mut input_subcircuits = HashMap::new();
 
         for op in circuit.operations() {
-            let root = uf.find(Node::Operation(op));
+            let root = uf.find(Value::Gate(op));
             if let Some(&id) = subcircuit_map.get(&root) {
                 operation_subcircuits.insert(op, id);
             }
         }
 
         for input in circuit.inputs() {
-            let root = uf.find(Node::Input(input));
+            let root = uf.find(Value::Input(input));
             if let Some(&id) = subcircuit_map.get(&root) {
                 input_subcircuits.insert(input, id);
             }
@@ -160,17 +160,10 @@ impl Analysis for SubCircuitAnalysis {
     }
 }
 
-/// Node in the union-find structure (either an operation or input).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Node {
-    Operation(Operation),
-    Input(Input),
-}
-
 /// Union-Find (Disjoint Set) data structure for tracking connectivity.
 struct UnionFind {
-    parent: HashMap<Node, Node>,
-    rank: HashMap<Node, usize>,
+    parent: HashMap<Value, Value>,
+    rank: HashMap<Value, usize>,
 }
 
 impl UnionFind {
@@ -181,12 +174,12 @@ impl UnionFind {
         }
     }
 
-    fn make_set(&mut self, node: Node) {
+    fn make_set(&mut self, node: Value) {
         self.parent.insert(node, node);
         self.rank.insert(node, 0);
     }
 
-    fn find(&mut self, node: Node) -> Node {
+    fn find(&mut self, node: Value) -> Value {
         let parent = *self.parent.get(&node).unwrap_or(&node);
 
         if parent != node {
@@ -199,7 +192,7 @@ impl UnionFind {
         }
     }
 
-    fn union(&mut self, node1: Node, node2: Node) {
+    fn union(&mut self, node1: Value, node2: Value) {
         let root1 = self.find(node1);
         let root2 = self.find(node2);
 

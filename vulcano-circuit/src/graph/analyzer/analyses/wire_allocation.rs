@@ -23,7 +23,7 @@ use crate::{
         },
         circuit::Circuit,
     },
-    handles::{Input, Operation, Source, Wire},
+    handles::{GateId, InputId, Value, Wire},
 };
 
 /// Analysis that computes optimal wire assignments for a circuit.
@@ -33,21 +33,21 @@ pub struct WireAllocationAnalysis;
 #[derive(Debug, Clone)]
 pub struct WireAllocation {
     /// Wire assignments for each operation's output.
-    pub operation_wires: HashMap<Operation, Wire>,
+    pub operation_wires: HashMap<GateId, Wire>,
     /// Wire assignments for each circuit input.
-    pub input_wires: HashMap<Input, Wire>,
+    pub input_wires: HashMap<InputId, Wire>,
     /// Total number of wires needed.
     pub wire_count: usize,
 }
 
 impl WireAllocation {
     /// Get the wire assigned to an operation's output.
-    pub fn operation_wire(&self, op: &Operation) -> Option<Wire> {
+    pub fn operation_wire(&self, op: &GateId) -> Option<Wire> {
         self.operation_wires.get(op).copied()
     }
 
     /// Get the wire assigned to a circuit input.
-    pub fn input_wire(&self, input: &Input) -> Option<Wire> {
+    pub fn input_wire(&self, input: &InputId) -> Option<Wire> {
         self.input_wires.get(input).copied()
     }
 
@@ -55,13 +55,6 @@ impl WireAllocation {
     pub fn total_wires(&self) -> usize {
         self.wire_count
     }
-}
-
-/// Represents a value in the circuit (either an operation output or an input).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Value {
-    Operation(Operation),
-    Input(Input),
 }
 
 impl Analysis for WireAllocationAnalysis {
@@ -92,7 +85,7 @@ fn collect_values<T: Gate>(circuit: &Circuit<T>) -> Vec<Value> {
     let mut values = Vec::new();
 
     for op in circuit.operations() {
-        values.push(Value::Operation(op));
+        values.push(Value::Gate(op));
     }
 
     for input in circuit.inputs() {
@@ -165,11 +158,8 @@ fn values_interfere<T: Gate>(
 /// Check if two values belong to the same sub-circuit.
 fn same_subcircuit(v1: Value, v2: Value, subcircuit: &SubCircuitInfo) -> Result<bool> {
     match (v1, v2) {
-        (Value::Operation(op1), Value::Operation(op2)) => {
-            subcircuit.same_subcircuit_ops(&op1, &op2)
-        }
-        (Value::Operation(op), Value::Input(input))
-        | (Value::Input(input), Value::Operation(op)) => {
+        (Value::Gate(op1), Value::Gate(op2)) => subcircuit.same_subcircuit_ops(&op1, &op2),
+        (Value::Gate(op), Value::Input(input)) | (Value::Input(input), Value::Gate(op)) => {
             subcircuit.same_subcircuit_op_input(&op, &input)
         }
         (Value::Input(input1), Value::Input(input2)) => {
@@ -181,12 +171,12 @@ fn same_subcircuit(v1: Value, v2: Value, subcircuit: &SubCircuitInfo) -> Result<
 /// Check if live ranges of two values overlap.
 fn ranges_overlap(v1: Value, v2: Value, liveness: &LivenessInfo) -> Result<bool> {
     let range1 = match v1 {
-        Value::Operation(op) => Some(liveness.operation_range(&op)?),
+        Value::Gate(op) => Some(liveness.operation_range(&op)?),
         Value::Input(input) => Some(liveness.input_range(&input)?),
     };
 
     let range2 = match v2 {
-        Value::Operation(op) => Some(liveness.operation_range(&op)?),
+        Value::Gate(op) => Some(liveness.operation_range(&op)?),
         Value::Input(input) => Some(liveness.input_range(&input)?),
     };
 
@@ -201,7 +191,7 @@ fn can_reuse_wire<T: Gate>(
     circuit: &Circuit<T>,
 ) -> bool {
     // gate_output must be an operation.
-    let Value::Operation(gate_op) = gate_output else {
+    let Value::Gate(gate_op) = gate_output else {
         return false;
     };
 
@@ -210,11 +200,11 @@ fn can_reuse_wire<T: Gate>(
 
     match input_or_producer {
         Value::Input(input) => {
-            sources.contains(&Source::Input(input))
+            sources.contains(&Value::Input(input))
                 && last_use.is_last_use_of_input(&gate_op, &input)
         }
-        Value::Operation(producer_op) => {
-            sources.contains(&Source::Gate(producer_op))
+        Value::Gate(producer_op) => {
+            sources.contains(&Value::Gate(producer_op))
                 && last_use.is_last_use_of_operation(&gate_op, &producer_op)
         }
     }
@@ -284,7 +274,7 @@ fn convert_to_wire_allocation(
         let wire = Wire::new(color);
 
         match value {
-            Value::Operation(op) => {
+            Value::Gate(op) => {
                 operation_wires.insert(op, wire);
             }
             Value::Input(input) => {
@@ -308,7 +298,7 @@ mod tests {
             analyzer::{Analyzer, analyses::wire_allocation::WireAllocationAnalysis},
             builder::Builder,
         },
-        handles::Operation,
+        handles::GateId,
     };
 
     enum TestGate {
@@ -350,16 +340,10 @@ mod tests {
 
         assert_eq!(allocation.wire_count, 1);
         assert!(allocation.input_wire(&input).is_some());
-        assert!(
-            allocation
-                .operation_wire(&Operation::new(gate.id()))
-                .is_some()
-        );
+        assert!(allocation.operation_wire(&GateId::new(gate.id())).is_some());
 
         let input_wire = allocation.input_wire(&input).unwrap();
-        let gate_wire = allocation
-            .operation_wire(&Operation::new(gate.id()))
-            .unwrap();
+        let gate_wire = allocation.operation_wire(&GateId::new(gate.id())).unwrap();
         assert_eq!(input_wire, gate_wire);
     }
 
@@ -441,7 +425,7 @@ mod tests {
         assert!(allocation.input_wire(&input2).is_some());
         assert!(
             allocation
-                .operation_wire(&Operation::new(negate1.id()))
+                .operation_wire(&GateId::new(negate1.id()))
                 .is_some()
         );
     }
@@ -486,17 +470,17 @@ mod tests {
         assert!(allocation.input_wire(&input2).is_some());
         assert!(
             allocation
-                .operation_wire(&Operation::new(negate1.id()))
+                .operation_wire(&GateId::new(negate1.id()))
                 .is_some()
         );
         assert!(
             allocation
-                .operation_wire(&Operation::new(negate2.id()))
+                .operation_wire(&GateId::new(negate2.id()))
                 .is_some()
         );
         assert!(
             allocation
-                .operation_wire(&Operation::new(addition.id()))
+                .operation_wire(&GateId::new(addition.id()))
                 .is_some()
         );
     }
@@ -549,22 +533,22 @@ mod tests {
         assert!(allocation.input_wire(&input2).is_some());
         assert!(
             allocation
-                .operation_wire(&Operation::new(negate1.id()))
+                .operation_wire(&GateId::new(negate1.id()))
                 .is_some()
         );
         assert!(
             allocation
-                .operation_wire(&Operation::new(negate2.id()))
+                .operation_wire(&GateId::new(negate2.id()))
                 .is_some()
         );
         assert!(
             allocation
-                .operation_wire(&Operation::new(negate3.id()))
+                .operation_wire(&GateId::new(negate3.id()))
                 .is_some()
         );
         assert!(
             allocation
-                .operation_wire(&Operation::new(negate4.id()))
+                .operation_wire(&GateId::new(negate4.id()))
                 .is_some()
         );
     }

@@ -1,8 +1,8 @@
 use crate::{
     error::Error,
     gate::Gate,
-    graph::builder::{Builder, Source},
-    handles::{Input, Operation, Output},
+    graph::builder::{Builder, Value},
+    handles::{GateId, InputId, OutputId},
 };
 
 enum TestGate {
@@ -132,7 +132,7 @@ fn non_existent_input() {
     let mut builder: Builder<TestGate> = Builder::new();
 
     let gate = builder.add_gate(TestGate::Negate);
-    let input = Input::new(999);
+    let input = InputId::new(999);
 
     let result = builder.connect_input_to_gate(input, gate);
 
@@ -145,7 +145,7 @@ fn non_existent_gate() {
     let mut builder: Builder<TestGate> = Builder::new();
 
     let input = builder.add_input();
-    let gate = Operation::new(999);
+    let gate = GateId::new(999);
 
     let result = builder.connect_input_to_gate(input, gate);
 
@@ -184,14 +184,14 @@ fn connect_input_to_gate() {
     assert!(result1.is_ok());
     assert!(builder.connected_inputs[input1.id()]);
     assert_eq!(builder.gate_entries[gate.id()].1.len(), 1);
-    assert_eq!(builder.gate_entries[gate.id()].1[0], Source::Input(input1));
+    assert_eq!(builder.gate_entries[gate.id()].1[0], Value::Input(input1));
 
     let result2 = builder.connect_input_to_gate(input2, gate);
 
     assert!(result2.is_ok());
     assert!(builder.connected_inputs[input2.id()]);
     assert_eq!(builder.gate_entries[gate.id()].1.len(), 2);
-    assert_eq!(builder.gate_entries[gate.id()].1[1], Source::Input(input2));
+    assert_eq!(builder.gate_entries[gate.id()].1[1], Value::Input(input2));
 }
 
 #[test]
@@ -199,7 +199,7 @@ fn source_gate_non_existent() {
     let mut builder: Builder<TestGate> = Builder::new();
 
     let gate = builder.add_gate(TestGate::Addition);
-    let source_gate = Operation::new(999);
+    let source_gate = GateId::new(999);
 
     let result = builder.connect_gate_to_gate(source_gate, gate);
 
@@ -212,7 +212,7 @@ fn destination_gate_non_existent() {
     let mut builder: Builder<TestGate> = Builder::new();
 
     let source_gate = builder.add_gate(TestGate::Negate);
-    let destination_gate = Operation::new(999);
+    let destination_gate = GateId::new(999);
 
     let result = builder.connect_gate_to_gate(source_gate, destination_gate);
 
@@ -277,13 +277,13 @@ fn connect_gate_to_gate() {
 
     assert!(result1.is_ok());
     assert_eq!(builder.gate_entries[gate2.id()].1.len(), 1);
-    assert_eq!(builder.gate_entries[gate2.id()].1[0], Source::Gate(gate1));
+    assert_eq!(builder.gate_entries[gate2.id()].1[0], Value::Gate(gate1));
 
     let result2 = builder.connect_gate_to_gate(gate1, gate2);
 
     assert!(result2.is_ok());
     assert_eq!(builder.gate_entries[gate2.id()].1.len(), 2);
-    assert_eq!(builder.gate_entries[gate2.id()].1[1], Source::Gate(gate1));
+    assert_eq!(builder.gate_entries[gate2.id()].1[1], Value::Gate(gate1));
 }
 
 #[test]
@@ -299,12 +299,12 @@ fn mixed_source_connections() {
     assert!(result1.is_ok());
     assert!(builder.connected_inputs[input.id()]);
     assert_eq!(builder.gate_entries[gate2.id()].1.len(), 1);
-    assert_eq!(builder.gate_entries[gate2.id()].1[0], Source::Input(input));
+    assert_eq!(builder.gate_entries[gate2.id()].1[0], Value::Input(input));
 
     let result2 = builder.connect_gate_to_gate(gate1, gate2);
     assert!(result2.is_ok());
     assert_eq!(builder.gate_entries[gate2.id()].1.len(), 2);
-    assert_eq!(builder.gate_entries[gate2.id()].1[1], Source::Gate(gate1));
+    assert_eq!(builder.gate_entries[gate2.id()].1[1], Value::Gate(gate1));
 
     let result3 = builder.connect_gate_to_gate(gate1, gate2);
     assert!(result3.is_err());
@@ -316,7 +316,7 @@ fn output_non_existent_gate() {
     let mut builder: Builder<TestGate> = Builder::new();
 
     let output = builder.add_output();
-    let gate = Operation::new(999);
+    let gate = GateId::new(999);
 
     let result = builder.connect_gate_to_output(gate, output);
 
@@ -330,7 +330,7 @@ fn non_existent_output() {
     let mut builder: Builder<TestGate> = Builder::new();
 
     let gate = builder.add_gate(TestGate::Negate);
-    let output = Output::new(999);
+    let output = OutputId::new(999);
 
     let result = builder.connect_gate_to_output(gate, output);
 
@@ -453,9 +453,7 @@ fn validate_input_arity_over_limit() {
     let _ = builder.connect_input_to_gate(input1, gate);
 
     // Manually connect another input to exceed arity.
-    builder.gate_entries[gate.id()]
-        .1
-        .push(Source::Input(input2));
+    builder.gate_entries[gate.id()].1.push(Value::Input(input2));
     builder.connected_inputs[input2.id()] = true;
 
     let result = builder.validate();
@@ -476,7 +474,7 @@ fn simple_circuit() {
     assert!(r1.is_ok());
     assert!(builder.connected_inputs[input.id()]);
     assert_eq!(builder.gate_entries[gate.id()].1.len(), 1);
-    assert_eq!(builder.gate_entries[gate.id()].1[0], Source::Input(input));
+    assert_eq!(builder.gate_entries[gate.id()].1[0], Value::Input(input));
 
     let r2 = builder.connect_gate_to_output(gate, output);
     assert!(r2.is_ok());
@@ -514,8 +512,8 @@ fn complex_circuit() {
     // Verify internal wiring.
     let srcs = &builder.gate_entries[addition.id()].1;
     assert_eq!(srcs.len(), 2);
-    assert_eq!(srcs[0], Source::Gate(negate1));
-    assert_eq!(srcs[1], Source::Gate(negate2));
+    assert_eq!(srcs[0], Value::Gate(negate1));
+    assert_eq!(srcs[1], Value::Gate(negate2));
 
     assert_eq!(builder.connected_outputs[output.id()], Some(addition));
 
@@ -553,7 +551,7 @@ fn multiple_outputs_from_different_gates() {
     // Check gate_entries sources.
     let s_neg2 = &builder.gate_entries[negate2.id()].1;
     assert_eq!(s_neg2.len(), 1);
-    assert_eq!(s_neg2[0], Source::Gate(negate1));
+    assert_eq!(s_neg2[0], Value::Gate(negate1));
 }
 
 #[test]

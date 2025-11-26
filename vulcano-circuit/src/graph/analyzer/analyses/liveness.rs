@@ -16,7 +16,7 @@ use crate::{
         },
         circuit::Circuit,
     },
-    handles::{Input, Operation, Source},
+    handles::{GateId, InputId, Value},
 };
 
 /// Represents the live range of a value.
@@ -52,16 +52,16 @@ pub struct LivenessAnalysis;
 #[derive(Debug, Clone)]
 pub struct LivenessInfo {
     /// Live ranges for each operation's output.
-    pub operation_ranges: HashMap<Operation, LiveRange>,
+    pub operation_ranges: HashMap<GateId, LiveRange>,
     /// Live ranges for each circuit input.
-    pub input_ranges: HashMap<Input, LiveRange>,
+    pub input_ranges: HashMap<InputId, LiveRange>,
 }
 
 impl LivenessInfo {
     /// Get the live range for an operation's output.
     ///
     /// Returns an error if the operation is not present in the liveness information.
-    pub fn operation_range(&self, op: &Operation) -> Result<&LiveRange> {
+    pub fn operation_range(&self, op: &GateId) -> Result<&LiveRange> {
         self.operation_ranges
             .get(op)
             .ok_or(Error::LivenessOperationNotFound(*op))
@@ -70,7 +70,7 @@ impl LivenessInfo {
     /// Get the live range for a circuit input.
     ///
     /// Returns an error if the input is not present in the liveness information.
-    pub fn input_range(&self, input: &Input) -> Result<&LiveRange> {
+    pub fn input_range(&self, input: &InputId) -> Result<&LiveRange> {
         self.input_ranges
             .get(input)
             .ok_or(Error::LivenessInputNotFound(*input))
@@ -79,7 +79,7 @@ impl LivenessInfo {
     /// Check if two operations' outputs have overlapping live ranges.
     ///
     /// Returns an error if either operation is not present in the liveness information.
-    pub fn operations_overlap(&self, op1: &Operation, op2: &Operation) -> Result<bool> {
+    pub fn operations_overlap(&self, op1: &GateId, op2: &GateId) -> Result<bool> {
         let range1 = self.operation_range(op1)?;
         let range2 = self.operation_range(op2)?;
         Ok(range1.overlaps(range2))
@@ -94,8 +94,8 @@ impl Analysis for LivenessAnalysis {
         let topo_order = analyzer.get::<TopologicalOrder>(circuit)?;
         let use_counts = analyzer.get::<UseCountAnalysis>(circuit)?;
 
-        let mut operation_ranges: HashMap<Operation, LiveRange> = HashMap::new();
-        let mut input_ranges: HashMap<Input, LiveRange> = HashMap::new();
+        let mut operation_ranges: HashMap<GateId, LiveRange> = HashMap::new();
+        let mut input_ranges: HashMap<InputId, LiveRange> = HashMap::new();
 
         // Initialize live ranges for operations.
         // Start time is when the operation executes in topological order.
@@ -115,7 +115,7 @@ impl Analysis for LivenessAnalysis {
 
             for source in sources {
                 match source {
-                    Source::Input(input) => {
+                    Value::Input(input) => {
                         // Track when input is first used and last used.
                         if use_counts.is_input_used(input)? {
                             input_ranges
@@ -125,13 +125,13 @@ impl Analysis for LivenessAnalysis {
                                     range.end = range.end.max(step_idx);
                                 })
                                 .or_insert(LiveRange {
-                                    // First use - input becomes live here
+                                    // First use - input becomes live here.
                                     start: step_idx,
                                     end: step_idx,
                                 });
                         }
                     }
-                    Source::Gate(producer_op) => {
+                    Value::Gate(producer_op) => {
                         // Extend producer's live range to this step.
                         if let Some(range) = operation_ranges.get_mut(producer_op) {
                             range.end = range.end.max(step_idx);
@@ -159,7 +159,7 @@ mod tests {
             },
             builder::Builder,
         },
-        handles::Operation,
+        handles::GateId,
     };
 
     enum TestGate {
@@ -208,9 +208,7 @@ mod tests {
         assert_eq!(input_range.end, 0);
 
         // Check gate liveness.
-        let gate_range = liveness
-            .operation_range(&Operation::new(gate.id()))
-            .unwrap();
+        let gate_range = liveness.operation_range(&GateId::new(gate.id())).unwrap();
         assert_eq!(gate_range.start, 0);
         assert_eq!(gate_range.end, 0);
     }
@@ -242,13 +240,13 @@ mod tests {
         assert_eq!(input_range.end, 0);
 
         let negate1_range = liveness
-            .operation_range(&Operation::new(negate1.id()))
+            .operation_range(&GateId::new(negate1.id()))
             .unwrap();
         assert_eq!(negate1_range.start, 0);
         assert_eq!(negate1_range.end, 1);
 
         let negate2_range = liveness
-            .operation_range(&Operation::new(negate2.id()))
+            .operation_range(&GateId::new(negate2.id()))
             .unwrap();
         assert_eq!(negate2_range.start, 1);
         assert_eq!(negate2_range.end, 1);
@@ -280,7 +278,7 @@ mod tests {
 
         // negate1 should be live until the last use (addition, which comes after negate2).
         let negate1_range = liveness
-            .operation_range(&Operation::new(negate1.id()))
+            .operation_range(&GateId::new(negate1.id()))
             .unwrap();
         assert_eq!(negate1_range.start, 0);
         // end should be at least 2 (when addition executes).
@@ -310,7 +308,7 @@ mod tests {
         let mut analyzer = Analyzer::new();
         let liveness = analyzer.get::<LivenessAnalysis>(&circuit).unwrap();
 
-        // Input should be live until both negate gates have consumed it.
+        // InputId should be live until both negate gates have consumed it.
         let input_range = liveness.input_range(&input).unwrap();
         assert_eq!(input_range.start, 0);
         // end should be at least 1 (both negates execute).
@@ -318,10 +316,10 @@ mod tests {
 
         // Both negates should be live until addition executes.
         let negate1_range = liveness
-            .operation_range(&Operation::new(negate1.id()))
+            .operation_range(&GateId::new(negate1.id()))
             .unwrap();
         let negate2_range = liveness
-            .operation_range(&Operation::new(negate2.id()))
+            .operation_range(&GateId::new(negate2.id()))
             .unwrap();
 
         // Both should die at the addition step.

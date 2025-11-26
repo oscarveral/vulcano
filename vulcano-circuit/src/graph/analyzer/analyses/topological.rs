@@ -11,30 +11,30 @@ use crate::{
         analyzer::{Analysis, Analyzer},
         circuit::Circuit,
     },
-    handles::{Operation, Source},
+    handles::{GateId, Value},
 };
 
 /// Analysis that computes a topological ordering of the gates in a circuit.
 pub struct TopologicalOrder;
 
 impl Analysis for TopologicalOrder {
-    type Output = Vec<Operation>;
+    type Output = Vec<GateId>;
 
     fn run<T: Gate>(circuit: &Circuit<T>, _analyzer: &mut Analyzer<T>) -> Result<Self::Output> {
         let n = circuit.gate_entries.len();
 
         // Build adjacency list (edge: src -> dst) and indegree counts by
-        // directly traversing Source dependencies.
+        // directly traversing Value dependencies.
         let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n];
         let mut indeg: Vec<usize> = vec![0; n];
 
         for (dst, (_, sources)) in circuit.gate_entries.iter().enumerate() {
             for source in sources.iter() {
                 match source {
-                    Source::Input(_) => {
+                    Value::Input(_) => {
                         // External inputs contribute no dependency edges
                     }
-                    Source::Gate(op) => {
+                    Value::Gate(op) => {
                         let src = op.id();
                         adj[src].push(dst);
                         indeg[dst] += 1;
@@ -69,17 +69,17 @@ impl Analysis for TopologicalOrder {
 
         if topo.len() != n {
             // Collect nodes involved in the cycle (those with indegree > 0).
-            let mut cycle_ops: Vec<Operation> = Vec::new();
+            let mut cycle_ops: Vec<GateId> = Vec::new();
             for (i, indegree) in indeg.iter().enumerate() {
                 if *indegree > 0 {
-                    cycle_ops.push(Operation::new(i));
+                    cycle_ops.push(GateId::new(i));
                 }
             }
             return Err(Error::CycleDetected(cycle_ops));
         }
 
-        // Convert indices to Operation handles.
-        Ok(topo.into_iter().map(Operation::new).collect())
+        // Convert indices to GateId handles.
+        Ok(topo.into_iter().map(GateId::new).collect())
     }
 }
 
@@ -93,7 +93,7 @@ mod tests {
             builder::Builder,
             circuit::Circuit,
         },
-        handles::{Operation, Source},
+        handles::{GateId, Value},
     };
 
     enum TestGate {
@@ -284,12 +284,12 @@ mod tests {
 
         let circuit = Circuit {
             gate_entries: vec![
-                (gate1, vec![Source::Gate(Operation::new(2))]), // gate1 depends on gate3
-                (gate2, vec![Source::Gate(Operation::new(0))]), // gate2 depends on gate1
-                (gate3, vec![Source::Gate(Operation::new(1))]), // gate3 depends on gate2 -> cycle!
+                (gate1, vec![Value::Gate(GateId::new(2))]), // gate1 depends on gate3
+                (gate2, vec![Value::Gate(GateId::new(0))]), // gate2 depends on gate1
+                (gate3, vec![Value::Gate(GateId::new(1))]), // gate3 depends on gate2 -> cycle!
             ],
             input_count: 0,
-            connected_outputs: vec![Operation::new(2)],
+            connected_outputs: vec![GateId::new(2)],
         };
 
         let mut analyzer = Analyzer::new();
@@ -312,9 +312,9 @@ mod tests {
 
         // gate uses its own output
         let circuit = Circuit {
-            gate_entries: vec![(gate, vec![Source::Gate(Operation::new(0))])],
+            gate_entries: vec![(gate, vec![Value::Gate(GateId::new(0))])],
             input_count: 0,
-            connected_outputs: vec![Operation::new(0)],
+            connected_outputs: vec![GateId::new(0)],
         };
 
         let mut analyzer = Analyzer::new();

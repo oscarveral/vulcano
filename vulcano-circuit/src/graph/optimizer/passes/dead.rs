@@ -7,7 +7,7 @@ use crate::{
         analyzer::{Analyzer, analyses::reachability::Reachability},
         circuit::Circuit,
     },
-    handles::Operation,
+    handles::GateId,
 };
 
 /// Optimization pass that eliminates dead gates from the circuit.
@@ -27,7 +27,7 @@ pub fn dead_gate_elimination<T: Gate>(
         .gate_entries
         .into_iter()
         .enumerate()
-        .filter(|(idx, _)| reachable_gates.contains(&Operation::new(*idx)))
+        .filter(|(idx, _)| reachable_gates.contains(&GateId::new(*idx)))
         .map(|(_, entry)| entry)
         .collect();
 
@@ -43,7 +43,7 @@ mod tests {
             analyzer::Analyzer, builder::Builder, circuit::Circuit,
             optimizer::passes::dead::dead_gate_elimination,
         },
-        handles::{Input, Operation, Source},
+        handles::{GateId, InputId, Value},
     };
 
     enum TestGate {
@@ -164,25 +164,25 @@ mod tests {
         let negate2_gate = TestGate::Negate;
         let addition_gate = TestGate::Addition;
 
-        let circuit_input = Input::new(0);
+        let circuit_input = InputId::new(0);
 
         let circuit = Circuit {
             gate_entries: vec![
-                (negate1_gate, vec![Source::Input(circuit_input)]),
+                (negate1_gate, vec![Value::Input(circuit_input)]),
                 (
                     negate2_gate,
-                    vec![Source::Input(Input::new(999))], // Unreachable: non-existent input
+                    vec![Value::Input(InputId::new(999))], // Unreachable: non-existent input
                 ),
                 (
                     addition_gate,
                     vec![
-                        Source::Gate(Operation::new(0)), // negate1
-                        Source::Gate(Operation::new(1)), // negate2
+                        Value::Gate(GateId::new(0)), // negate1
+                        Value::Gate(GateId::new(1)), // negate2
                     ],
                 ),
             ],
             input_count: 1,
-            connected_outputs: vec![Operation::new(2)], // addition
+            connected_outputs: vec![GateId::new(2)], // addition
         };
 
         let gate_count_before = circuit.gate_entries.len();

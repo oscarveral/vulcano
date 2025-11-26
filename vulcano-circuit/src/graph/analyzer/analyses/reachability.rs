@@ -13,7 +13,7 @@ use crate::{
         analyzer::{Analysis, Analyzer},
         circuit::Circuit,
     },
-    handles::{Operation, Source},
+    handles::{GateId, Value},
 };
 
 /// Analysis that computes which gates are reachable in the circuit.
@@ -27,7 +27,7 @@ pub struct Reachability;
 
 impl Analysis for Reachability {
     /// Set of operations that are reachable.
-    type Output = HashSet<Operation>;
+    type Output = HashSet<GateId>;
 
     fn run<T: Gate>(circuit: &Circuit<T>, _analyzer: &mut Analyzer<T>) -> Result<Self::Output> {
         // Step 1: Forward reachability - BFS from inputs.
@@ -37,7 +37,7 @@ impl Analysis for Reachability {
         // Start from gates that consume valid circuit inputs.
         for (gate_idx, (_, sources)) in circuit.gate_entries.iter().enumerate() {
             let has_input_dependency = sources.iter().any(|source| {
-                if let Source::Input(input) = source {
+                if let Value::Input(input) = source {
                     input.id() < circuit.input_count
                 } else {
                     false
@@ -61,7 +61,7 @@ impl Analysis for Reachability {
 
                 let consumes_output = sources
                     .iter()
-                    .any(|source| matches!(source, Source::Gate(op) if op.id() == producer_idx));
+                    .any(|source| matches!(source, Value::Gate(op) if op.id() == producer_idx));
 
                 if consumes_output {
                     forward_reachable.insert(consumer_idx);
@@ -86,7 +86,7 @@ impl Analysis for Reachability {
             let sources = &circuit.gate_entries[gate_idx].1;
             for source in sources {
                 // If this source is another gate, mark it reachable.
-                if let Source::Gate(producer_op) = source {
+                if let Value::Gate(producer_op) = source {
                     let producer_idx = producer_op.id();
                     if backward_reachable.insert(producer_idx) {
                         queue.push_back(producer_idx);
@@ -96,9 +96,9 @@ impl Analysis for Reachability {
         }
 
         // Step 3: Intersection - gates must be reachable both ways.
-        let reachable: HashSet<Operation> = forward_reachable
+        let reachable: HashSet<GateId> = forward_reachable
             .intersection(&backward_reachable)
-            .map(|&idx| Operation::new(idx))
+            .map(|&idx| GateId::new(idx))
             .collect();
 
         Ok(reachable)
@@ -114,7 +114,7 @@ mod tests {
             builder::Builder,
             circuit::Circuit,
         },
-        handles::{Input, Operation, Source},
+        handles::{GateId, InputId, Value},
     };
 
     enum TestGate {
@@ -204,25 +204,25 @@ mod tests {
         let negate2_gate = TestGate::Negate;
         let addition_gate = TestGate::Addition;
 
-        let circuit_input = Input::new(0);
+        let circuit_input = InputId::new(0);
 
         let circuit = Circuit {
             gate_entries: vec![
-                (negate1_gate, vec![Source::Input(circuit_input)]),
+                (negate1_gate, vec![Value::Input(circuit_input)]),
                 (
                     negate2_gate,
-                    vec![Source::Input(Input::new(999))], // Unreachable: depends on non-existent input
+                    vec![Value::Input(InputId::new(999))], // Unreachable: depends on non-existent input
                 ),
                 (
                     addition_gate,
                     vec![
-                        Source::Gate(Operation::new(0)), // negate1
-                        Source::Gate(Operation::new(1)), // negate2
+                        Value::Gate(GateId::new(0)), // negate1
+                        Value::Gate(GateId::new(1)), // negate2
                     ],
                 ),
             ],
             input_count: 1,
-            connected_outputs: vec![Operation::new(2)], // addition
+            connected_outputs: vec![GateId::new(2)], // addition
         };
 
         let mut analyzer = Analyzer::new();
@@ -231,9 +231,9 @@ mod tests {
         assert!(result.is_ok());
         let reachable = result.unwrap();
         assert_eq!(reachable.len(), 2);
-        assert!(reachable.contains(&Operation::new(0)));
-        assert!(reachable.contains(&Operation::new(2)));
-        assert!(!reachable.contains(&Operation::new(1)));
+        assert!(reachable.contains(&GateId::new(0)));
+        assert!(reachable.contains(&GateId::new(2)));
+        assert!(!reachable.contains(&GateId::new(1)));
     }
 
     #[test]

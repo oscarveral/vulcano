@@ -13,7 +13,7 @@ use crate::{
         analyzer::{Analysis, Analyzer, analyses::topological::TopologicalOrder},
         circuit::Circuit,
     },
-    handles::{Input, Operation, Source},
+    handles::{GateId, InputId, Value},
 };
 
 /// Analysis that identifies the last use of each value in a circuit.
@@ -23,29 +23,29 @@ pub struct LastUseAnalysis;
 #[derive(Debug, Clone)]
 pub struct LastUseInfo {
     /// For each operation, maps it to the last gate that uses its output (if any).
-    pub operation_last_use: HashMap<Operation, Operation>,
+    pub operation_last_use: HashMap<GateId, GateId>,
     /// For each input, maps it to the last gate that uses it (if any).
-    pub input_last_use: HashMap<Input, Operation>,
+    pub input_last_use: HashMap<InputId, GateId>,
 }
 
 impl LastUseInfo {
     /// Check if a gate is the last user of a given operation's output.
-    pub fn is_last_use_of_operation(&self, consumer: &Operation, producer: &Operation) -> bool {
+    pub fn is_last_use_of_operation(&self, consumer: &GateId, producer: &GateId) -> bool {
         self.operation_last_use.get(producer) == Some(consumer)
     }
 
     /// Check if a gate is the last user of a given input.
-    pub fn is_last_use_of_input(&self, consumer: &Operation, input: &Input) -> bool {
+    pub fn is_last_use_of_input(&self, consumer: &GateId, input: &InputId) -> bool {
         self.input_last_use.get(input) == Some(consumer)
     }
 
     /// Get the last gate that uses an operation's output.
-    pub fn get_operation_last_use(&self, op: &Operation) -> Option<Operation> {
+    pub fn get_operation_last_use(&self, op: &GateId) -> Option<GateId> {
         self.operation_last_use.get(op).copied()
     }
 
     /// Get the last gate that uses an input.
-    pub fn get_input_last_use(&self, input: &Input) -> Option<Operation> {
+    pub fn get_input_last_use(&self, input: &InputId) -> Option<GateId> {
         self.input_last_use.get(input).copied()
     }
 }
@@ -56,8 +56,8 @@ impl Analysis for LastUseAnalysis {
     fn run<T: Gate>(circuit: &Circuit<T>, analyzer: &mut Analyzer<T>) -> Result<Self::Output> {
         let topo_order = analyzer.get::<TopologicalOrder>(circuit)?;
 
-        let mut operation_last_use: HashMap<Operation, Operation> = HashMap::new();
-        let mut input_last_use: HashMap<Input, Operation> = HashMap::new();
+        let mut operation_last_use: HashMap<GateId, GateId> = HashMap::new();
+        let mut input_last_use: HashMap<InputId, GateId> = HashMap::new();
 
         // Scan through gates in topological order.
         // For each value used, update its last use to the current gate.
@@ -66,11 +66,11 @@ impl Analysis for LastUseAnalysis {
 
             for source in sources {
                 match source {
-                    Source::Input(input) => {
+                    Value::Input(input) => {
                         // Update last use of this input.
                         input_last_use.insert(*input, consumer_op);
                     }
-                    Source::Gate(producer_op) => {
+                    Value::Gate(producer_op) => {
                         // Update last use of this operation's output.
                         operation_last_use.insert(*producer_op, consumer_op);
                     }
@@ -93,7 +93,7 @@ mod tests {
             analyzer::{Analyzer, analyses::last_use::LastUseAnalysis},
             builder::Builder,
         },
-        handles::Operation,
+        handles::GateId,
     };
 
     enum TestGate {
@@ -132,12 +132,12 @@ mod tests {
         let mut analyzer = Analyzer::new();
         let last_use = analyzer.get::<LastUseAnalysis>(&circuit).unwrap();
 
-        // Input's last use is by the negate gate.
+        // InputId's last use is by the negate gate.
         assert_eq!(
             last_use.get_input_last_use(&input),
-            Some(Operation::new(gate.id()))
+            Some(GateId::new(gate.id()))
         );
-        assert!(last_use.is_last_use_of_input(&Operation::new(gate.id()), &input));
+        assert!(last_use.is_last_use_of_input(&GateId::new(gate.id()), &input));
     }
 
     #[test]
@@ -162,21 +162,21 @@ mod tests {
         let mut analyzer = Analyzer::new();
         let last_use = analyzer.get::<LastUseAnalysis>(&circuit).unwrap();
 
-        // Input is used by both negate1 and negate2, last use depends on topological order.
+        // InputId is used by both negate1 and negate2, last use depends on topological order.
         let input_last_user = last_use.get_input_last_use(&input).unwrap();
         assert!(
-            input_last_user == Operation::new(negate1.id())
-                || input_last_user == Operation::new(negate2.id())
+            input_last_user == GateId::new(negate1.id())
+                || input_last_user == GateId::new(negate2.id())
         );
 
         // Both negate gates are last used by addition.
         assert_eq!(
-            last_use.get_operation_last_use(&Operation::new(negate1.id())),
-            Some(Operation::new(addition.id()))
+            last_use.get_operation_last_use(&GateId::new(negate1.id())),
+            Some(GateId::new(addition.id()))
         );
         assert_eq!(
-            last_use.get_operation_last_use(&Operation::new(negate2.id())),
-            Some(Operation::new(addition.id()))
+            last_use.get_operation_last_use(&GateId::new(negate2.id())),
+            Some(GateId::new(addition.id()))
         );
     }
 
@@ -205,11 +205,11 @@ mod tests {
         // negate1's output is used by both negate2 and addition.
         // Last use depends on topological order.
         let negate1_last_user = last_use
-            .get_operation_last_use(&Operation::new(negate1.id()))
+            .get_operation_last_use(&GateId::new(negate1.id()))
             .unwrap();
         assert!(
-            negate1_last_user == Operation::new(negate2.id())
-                || negate1_last_user == Operation::new(addition.id())
+            negate1_last_user == GateId::new(negate2.id())
+                || negate1_last_user == GateId::new(addition.id())
         );
     }
 }

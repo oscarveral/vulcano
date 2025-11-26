@@ -6,7 +6,7 @@
 
 use std::any::TypeId;
 
-use crate::handles::{Input, Operation, Output};
+use crate::handles::{GateId, InputId, OutputId};
 
 /// Errors that can occur while constructing a circuit.
 ///
@@ -16,33 +16,33 @@ use crate::handles::{Input, Operation, Output};
 #[derive(PartialEq, Eq)]
 pub enum Error {
     /// The referenced gate handle doesn't exist.
-    NonExistentGate(Operation),
+    NonExistentGate(GateId),
     /// The referenced input handle doesn't exist.
-    NonExistentInput(Input),
+    NonExistentInput(InputId),
     /// The referenced output handle doesn't exist.
-    NonExistentOutput(Output),
+    NonExistentOutput(OutputId),
     /// The circuit has no gates.
     EmptyCircuit,
     /// An attempt was made to connect more inputs to a gate than its
     /// declared arity allows.
-    InputArityOverLimit(Operation),
+    InputArityOverLimit(GateId),
     /// An attempt was made to connect fewer inputs to a gate than its
     /// declared arity requires.
-    InputArityUnderLimit(Operation),
+    InputArityUnderLimit(GateId),
     /// A gate was connected to more than one output slot.
-    OutputArityOverLimit(Operation),
+    OutputArityOverLimit(GateId),
     /// A gate was connected to itself.
-    SelfConnection(Operation),
+    SelfConnection(GateId),
     /// An input slot was not connected to any gate.
-    UnusedInput(Input),
+    UnusedInput(InputId),
     /// An output slot was not connected to any gate.
-    UnusedOutput(Output),
+    UnusedOutput(OutputId),
     /// The requested output slot is already occupied.
-    UsedOutput(Output),
+    UsedOutput(OutputId),
     /// A cycle was detected while ordering the circuit.
-    /// Carries a list of offending [`Operation`] handles that may be
+    /// Carries a list of offending [`GateId`] handles that may be
     /// involved in the cycle.
-    CycleDetected(Vec<Operation>),
+    CycleDetected(Vec<GateId>),
     /// An attempt was made to optimize a circuit that has finalized all optimizations.
     AlreadyFinalized,
     /// Internal invariant was violated while manipulating circuit data.
@@ -54,17 +54,17 @@ pub enum Error {
     /// The analysis cache is missing an expected entry.
     AnalysisCacheMissingEntry(TypeId),
     /// An operation was not found in liveness information.
-    LivenessOperationNotFound(Operation),
+    LivenessOperationNotFound(GateId),
     /// An input was not found in liveness information.
-    LivenessInputNotFound(Input),
+    LivenessInputNotFound(InputId),
     /// An operation was not found in use count information.
-    UseCountOperationNotFound(Operation),
+    UseCountOperationNotFound(GateId),
     /// An input was not found in use count information.
-    UseCountInputNotFound(Input),
+    UseCountInputNotFound(InputId),
     /// An operation was not found in sub-circuit information.
-    SubCircuitOperationNotFound(Operation),
+    SubCircuitOperationNotFound(GateId),
     /// An input was not found in sub-circuit information.
-    SubCircuitInputNotFound(Input),
+    SubCircuitInputNotFound(InputId),
     /// A value was not assigned a wire color during wire allocation.
     WireAllocationValueNotColored,
     /// Failed to find an available wire color during allocation.
@@ -75,8 +75,8 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::NonExistentGate(h) => write!(f, "Gate {:?} does not exist", h),
-            Error::NonExistentInput(h) => write!(f, "Input {:?} does not exist", h),
-            Error::NonExistentOutput(h) => write!(f, "Output {:?} does not exist", h),
+            Error::NonExistentInput(h) => write!(f, "InputId {:?} does not exist", h),
+            Error::NonExistentOutput(h) => write!(f, "OutputId {:?} does not exist", h),
             Error::EmptyCircuit => write!(f, "Circuit is empty"),
             Error::InputArityOverLimit(gate) => {
                 write!(f, "Gate {:?} has too many input connections", gate)
@@ -89,12 +89,12 @@ impl std::fmt::Display for Error {
             }
             Error::SelfConnection(gate) => write!(f, "Gate {:?} cannot connect to itself", gate),
             Error::UnusedInput(input) => {
-                write!(f, "Input {:?} is not connected to any gate", input)
+                write!(f, "InputId {:?} is not connected to any gate", input)
             }
             Error::UnusedOutput(output) => {
-                write!(f, "Output {:?} is not connected to any gate", output)
+                write!(f, "OutputId {:?} is not connected to any gate", output)
             }
-            Error::UsedOutput(output) => write!(f, "Output {:?} is already connected", output),
+            Error::UsedOutput(output) => write!(f, "OutputId {:?} is already connected", output),
             Error::CycleDetected(ops) => {
                 write!(f, "Cycle detected involving operations: {:?}", ops)
             }
@@ -107,22 +107,26 @@ impl std::fmt::Display for Error {
                 write!(f, "Analysis cache missing entry for TypeId {:?}", type_id)
             }
             Error::LivenessOperationNotFound(op) => {
-                write!(f, "Operation {:?} not found in liveness information", op)
+                write!(f, "GateId {:?} not found in liveness information", op)
             }
             Error::LivenessInputNotFound(input) => {
-                write!(f, "Input {:?} not found in liveness information", input)
+                write!(f, "InputId {:?} not found in liveness information", input)
             }
             Error::UseCountOperationNotFound(op) => {
-                write!(f, "Operation {:?} not found in use count information", op)
+                write!(f, "GateId {:?} not found in use count information", op)
             }
             Error::UseCountInputNotFound(input) => {
-                write!(f, "Input {:?} not found in use count information", input)
+                write!(f, "InputId {:?} not found in use count information", input)
             }
             Error::SubCircuitOperationNotFound(op) => {
-                write!(f, "Operation {:?} not found in sub-circuit information", op)
+                write!(f, "GateId {:?} not found in sub-circuit information", op)
             }
             Error::SubCircuitInputNotFound(input) => {
-                write!(f, "Input {:?} not found in sub-circuit information", input)
+                write!(
+                    f,
+                    "InputId {:?} not found in sub-circuit information",
+                    input
+                )
             }
             Error::WireAllocationValueNotColored => {
                 write!(

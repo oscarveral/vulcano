@@ -13,7 +13,7 @@ use crate::{
     error::{Error, Result},
     gate::Gate,
     graph::circuit::Circuit,
-    handles::{Input, Operation, Output, Source},
+    handles::{GateId, InputId, OutputId, Value},
 };
 
 /// Incremental builder for a circuit.
@@ -24,9 +24,9 @@ use crate::{
 /// variants on invalid operations.
 pub struct Builder<T: Gate> {
     /// Per-gate storage: (gate, list of backward sources).
-    gate_entries: Vec<(T, Vec<Source>)>,
+    gate_entries: Vec<(T, Vec<Value>)>,
     /// Per-output storage: (output, source).
-    connected_outputs: Vec<Option<Operation>>,
+    connected_outputs: Vec<Option<GateId>>,
     /// Per-input storage: (input, connected).
     connected_inputs: Vec<bool>,
 }
@@ -43,7 +43,7 @@ impl<T: Gate> Builder<T> {
 
     /// Return the number of gates currently registered in the builder.
     ///
-    /// This is the number of [`Operation`] handles that have been
+    /// This is the number of [`GateId`] handles that have been
     /// issued by [`Builder::add_gate`] so far.        
     pub fn gate_count(&self) -> usize {
         self.gate_entries.len()
@@ -52,7 +52,7 @@ impl<T: Gate> Builder<T> {
     /// Return the number of input slots in the circuit under
     /// construction.
     ///
-    /// Each input is represented by an [`crate::handles::Input`] handle
+    /// Each input is represented by an [`crate::handles::InputId`] handle
     /// created with [`Builder::add_input`].
     pub fn input_count(&self) -> usize {
         self.connected_inputs.len()
@@ -61,42 +61,42 @@ impl<T: Gate> Builder<T> {
     /// Return the number of output slots in the circuit under
     /// construction.
     ///
-    /// Each output is represented by an [`crate::handles::Output`]
+    /// Each output is represented by an [`crate::handles::OutputId`]
     /// handle created with [`Builder::add_output`].
     pub fn output_count(&self) -> usize {
         self.connected_outputs.len()
     }
 
     /// Add a new gate instance to the builder and return its
-    /// [`crate::handles::Operation`] handle.
+    /// [`crate::handles::GateId`] handle.
     ///
     /// The builder takes ownership of `gate`. A fresh per-gate
     /// input-source list is created and the returned handle may be
     /// used in subsequent connect calls.
-    pub fn add_gate(&mut self, gate: T) -> Operation {
+    pub fn add_gate(&mut self, gate: T) -> GateId {
         let handle = self.gate_entries.len();
         self.gate_entries.push((gate, Vec::new()));
-        Operation::new(handle)
+        GateId::new(handle)
     }
 
-    /// Add a new external input slot and return its [`Input`] handle.
+    /// Add a new external input slot and return its [`InputId`] handle.
     ///
     /// The slot starts unconnected (represented as `false`) until
     /// [`Builder::connect_input_to_gate`] wires it into a gate.
-    pub fn add_input(&mut self) -> Input {
+    pub fn add_input(&mut self) -> InputId {
         let handle = self.connected_inputs.len();
         self.connected_inputs.push(false);
-        Input::new(handle)
+        InputId::new(handle)
     }
 
-    /// Add a new external output slot and return its [`Output`] handle.
+    /// Add a new external output slot and return its [`OutputId`] handle.
     ///
     /// The slot starts unconnected (represented as [`None`]) until
     /// [`Builder::connect_gate_to_output`] assigns a gate output to it.
-    pub fn add_output(&mut self) -> Output {
+    pub fn add_output(&mut self) -> OutputId {
         let handle = self.connected_outputs.len();
         self.connected_outputs.push(None);
-        Output::new(handle)
+        OutputId::new(handle)
     }
 
     /// Connect an external `input` slot to a gate's next available
@@ -112,7 +112,7 @@ impl<T: Gate> Builder<T> {
     ///
     /// On success, the function records the backward edge in the
     /// gate's source list and marks the input slot as connected.
-    pub fn connect_input_to_gate(&mut self, input: Input, gate: Operation) -> Result<()> {
+    pub fn connect_input_to_gate(&mut self, input: InputId, gate: GateId) -> Result<()> {
         let input_idx = input.id();
         if input_idx >= self.connected_inputs.len() {
             return Err(Error::NonExistentInput(input));
@@ -126,7 +126,7 @@ impl<T: Gate> Builder<T> {
         if edges.len() >= gate_arity {
             return Err(Error::InputArityOverLimit(gate));
         }
-        edges.push(Source::Input(input));
+        edges.push(Value::Input(input));
         self.connected_inputs[input_idx] = true;
         Ok(())
     }
@@ -144,7 +144,7 @@ impl<T: Gate> Builder<T> {
     ///
     /// On success, the source gate is appended to the destination's
     /// backward-edge list.
-    pub fn connect_gate_to_gate(&mut self, src_gate: Operation, dst_gate: Operation) -> Result<()> {
+    pub fn connect_gate_to_gate(&mut self, src_gate: GateId, dst_gate: GateId) -> Result<()> {
         let src_idx = src_gate.id();
         let dst_idx = dst_gate.id();
 
@@ -164,7 +164,7 @@ impl<T: Gate> Builder<T> {
             return Err(Error::InputArityOverLimit(dst_gate));
         }
 
-        back.push(Source::Gate(src_gate));
+        back.push(Value::Gate(src_gate));
         Ok(())
     }
 
@@ -179,7 +179,7 @@ impl<T: Gate> Builder<T> {
     ///   to attach it again yields [`Error::OutputArityOverLimit`].
     ///
     /// On success the output slot is marked as connected to `gate`.
-    pub fn connect_gate_to_output(&mut self, gate: Operation, output: Output) -> Result<()> {
+    pub fn connect_gate_to_output(&mut self, gate: GateId, output: OutputId) -> Result<()> {
         let gate_idx = gate.id();
         if gate_idx >= self.gate_entries.len() {
             return Err(Error::NonExistentGate(gate));
@@ -218,22 +218,22 @@ impl<T: Gate> Builder<T> {
         }
         for (i, connected) in self.connected_inputs.iter().enumerate() {
             if !connected {
-                return Err(Error::UnusedInput(Input::new(i)));
+                return Err(Error::UnusedInput(InputId::new(i)));
             }
         }
         for (i, output_opt) in self.connected_outputs.iter().enumerate() {
             if output_opt.is_none() {
-                return Err(Error::UnusedOutput(Output::new(i)));
+                return Err(Error::UnusedOutput(OutputId::new(i)));
             }
         }
         for (i, (gate, sources)) in self.gate_entries.iter().enumerate() {
             let arity = gate.arity();
             if sources.len() > arity {
                 // This should not happen if connect methods are used.
-                return Err(Error::InputArityOverLimit(Operation::new(i)));
+                return Err(Error::InputArityOverLimit(GateId::new(i)));
             }
             if sources.len() < arity {
-                return Err(Error::InputArityUnderLimit(Operation::new(i)));
+                return Err(Error::InputArityUnderLimit(GateId::new(i)));
             }
         }
         Ok(())
@@ -243,11 +243,11 @@ impl<T: Gate> Builder<T> {
     ///
     /// This consumes the builder and performs the following steps:
     /// 1. Validate local invariants.
-    /// 2. Collect gate entries with their `Source` dependencies directly.
+    /// 2. Collect gate entries with their `Value` dependencies directly.
     ///
     /// Guarantees and notes:
     /// - The per-gate input ordering is preserved: each gate's
-    ///   `Vec<Source>` is used as the canonical input order.
+    ///   `Vec<Value>` is used as the canonical input order.
     ///
     /// Returns a [`Circuit`] on success or an appropriate
     /// [`Error`] if validation fails.
@@ -257,12 +257,11 @@ impl<T: Gate> Builder<T> {
         let gate_entries = self.gate_entries;
         let input_count = self.connected_inputs.len();
 
-        let mut connected_outputs: Vec<Operation> =
-            Vec::with_capacity(self.connected_outputs.len());
+        let mut connected_outputs: Vec<GateId> = Vec::with_capacity(self.connected_outputs.len());
         for (i, opt) in self.connected_outputs.into_iter().enumerate() {
             match opt {
                 Some(op) => connected_outputs.push(op),
-                None => return Err(Error::UnusedOutput(Output::new(i))),
+                None => return Err(Error::UnusedOutput(OutputId::new(i))),
             }
         }
 
