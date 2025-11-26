@@ -61,6 +61,10 @@ pub enum Error {
     UseCountOperationNotFound(Operation),
     /// An input was not found in use count information.
     UseCountInputNotFound(Input),
+    /// An operation was not found in sub-circuit information.
+    SubCircuitOperationNotFound(Operation),
+    /// An input was not found in sub-circuit information.
+    SubCircuitInputNotFound(Input),
     /// A value was not assigned a wire color during wire allocation.
     WireAllocationValueNotColored,
     /// Failed to find an available wire color during allocation.
@@ -114,6 +118,12 @@ impl std::fmt::Display for Error {
             Error::UseCountInputNotFound(input) => {
                 write!(f, "Input {:?} not found in use count information", input)
             }
+            Error::SubCircuitOperationNotFound(op) => {
+                write!(f, "Operation {:?} not found in sub-circuit information", op)
+            }
+            Error::SubCircuitInputNotFound(input) => {
+                write!(f, "Input {:?} not found in sub-circuit information", input)
+            }
             Error::WireAllocationValueNotColored => {
                 write!(
                     f,
@@ -164,6 +174,12 @@ impl std::fmt::Debug for Error {
             }
             Error::UseCountInputNotFound(input) => {
                 write!(f, "UseCountInputNotFound({:?})", input)
+            }
+            Error::SubCircuitOperationNotFound(op) => {
+                write!(f, "SubCircuitOperationNotFound({:?})", op)
+            }
+            Error::SubCircuitInputNotFound(input) => {
+                write!(f, "SubCircuitInputNotFound({:?})", input)
             }
             Error::WireAllocationValueNotColored => {
                 write!(f, "WireAllocationValueNotColored")
