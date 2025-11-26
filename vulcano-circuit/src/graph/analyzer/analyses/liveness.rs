@@ -64,7 +64,7 @@ impl LivenessInfo {
     pub fn operation_range(&self, op: &GateId) -> Result<&LiveRange> {
         self.operation_ranges
             .get(op)
-            .ok_or(Error::LivenessOperationNotFound(*op))
+            .ok_or(Error::LivenessGateNotFound(*op))
     }
 
     /// Get the live range for a circuit input.

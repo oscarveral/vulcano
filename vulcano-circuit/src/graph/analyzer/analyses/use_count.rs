@@ -45,7 +45,7 @@ impl UseCountInfo {
         self.operation_uses
             .get(op)
             .copied()
-            .ok_or(Error::UseCountOperationNotFound(*op))
+            .ok_or(Error::UseCountGateNotFound(*op))
     }
 
     /// Get the use count for an input.

@@ -42,7 +42,7 @@ impl SubCircuitInfo {
         self.operation_subcircuits
             .get(op)
             .copied()
-            .ok_or(Error::SubCircuitOperationNotFound(*op))
+            .ok_or(Error::SubCircuitGateNotFound(*op))
     }
 
     /// Get the sub-circuit ID for an input.

@@ -53,16 +53,16 @@ pub enum Error {
     AnalysisCacheTypeMismatch(TypeId),
     /// The analysis cache is missing an expected entry.
     AnalysisCacheMissingEntry(TypeId),
-    /// An operation was not found in liveness information.
-    LivenessOperationNotFound(GateId),
+    /// A gate was not found in liveness information.
+    LivenessGateNotFound(GateId),
     /// An input was not found in liveness information.
     LivenessInputNotFound(InputId),
-    /// An operation was not found in use count information.
-    UseCountOperationNotFound(GateId),
+    /// A gate was not found in use count information.
+    UseCountGateNotFound(GateId),
     /// An input was not found in use count information.
     UseCountInputNotFound(InputId),
-    /// An operation was not found in sub-circuit information.
-    SubCircuitOperationNotFound(GateId),
+    /// A gate was not found in sub-circuit information.
+    SubCircuitGateNotFound(GateId),
     /// An input was not found in sub-circuit information.
     SubCircuitInputNotFound(InputId),
     /// A value was not assigned a wire color during wire allocation.
@@ -106,19 +106,19 @@ impl std::fmt::Display for Error {
             Error::AnalysisCacheMissingEntry(type_id) => {
                 write!(f, "Analysis cache missing entry for TypeId {:?}", type_id)
             }
-            Error::LivenessOperationNotFound(op) => {
+            Error::LivenessGateNotFound(op) => {
                 write!(f, "GateId {:?} not found in liveness information", op)
             }
             Error::LivenessInputNotFound(input) => {
                 write!(f, "InputId {:?} not found in liveness information", input)
             }
-            Error::UseCountOperationNotFound(op) => {
+            Error::UseCountGateNotFound(op) => {
                 write!(f, "GateId {:?} not found in use count information", op)
             }
             Error::UseCountInputNotFound(input) => {
                 write!(f, "InputId {:?} not found in use count information", input)
             }
-            Error::SubCircuitOperationNotFound(op) => {
+            Error::SubCircuitGateNotFound(op) => {
                 write!(f, "GateId {:?} not found in sub-circuit information", op)
             }
             Error::SubCircuitInputNotFound(input) => {
@@ -167,19 +167,19 @@ impl std::fmt::Debug for Error {
             Error::AnalysisCacheMissingEntry(type_id) => {
                 write!(f, "AnalysisCacheMissingEntry({:?})", type_id)
             }
-            Error::LivenessOperationNotFound(op) => {
+            Error::LivenessGateNotFound(op) => {
                 write!(f, "LivenessOperationNotFound({:?})", op)
             }
             Error::LivenessInputNotFound(input) => {
                 write!(f, "LivenessInputNotFound({:?})", input)
             }
-            Error::UseCountOperationNotFound(op) => {
+            Error::UseCountGateNotFound(op) => {
                 write!(f, "UseCountOperationNotFound({:?})", op)
             }
             Error::UseCountInputNotFound(input) => {
                 write!(f, "UseCountInputNotFound({:?})", input)
             }
-            Error::SubCircuitOperationNotFound(op) => {
+            Error::SubCircuitGateNotFound(op) => {
                 write!(f, "SubCircuitOperationNotFound({:?})", op)
             }
             Error::SubCircuitInputNotFound(input) => {
