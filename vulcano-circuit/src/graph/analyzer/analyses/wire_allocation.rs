@@ -36,8 +36,8 @@ pub struct WireAllocation {
     pub operation_wires: HashMap<GateId, Wire>,
     /// Wire assignments for each circuit input.
     pub input_wires: HashMap<InputId, Wire>,
-    /// Total number of wires needed.
-    pub wire_count: usize,
+    /// Wire count for each subcircuit (indexed by subcircuit ID).
+    pub subcircuit_wire_counts: HashMap<usize, usize>,
 }
 
 impl WireAllocation {
@@ -51,9 +51,14 @@ impl WireAllocation {
         self.input_wires.get(input).copied()
     }
 
-    /// Returns the total number of wires allocated.
+    /// Returns the number of wires needed for a specific subcircuit.
+    pub fn subcircuit_wire_count(&self, subcircuit_id: usize) -> Option<usize> {
+        self.subcircuit_wire_counts.get(&subcircuit_id).copied()
+    }
+
+    /// Returns the total number of wires allocated across all subcircuits.
     pub fn total_wires(&self) -> usize {
-        self.wire_count
+        self.subcircuit_wire_counts.values().sum()
     }
 }
 
@@ -76,7 +81,7 @@ impl Analysis for WireAllocationAnalysis {
         let coloring = greedy_coloring(&values, &interference)?;
 
         // Convert coloring to wire assignments.
-        convert_to_wire_allocation(values, coloring)
+        convert_to_wire_allocation(values, coloring, &subcircuit)
     }
 }
 
@@ -257,6 +262,7 @@ fn greedy_coloring(
 fn convert_to_wire_allocation(
     values: Vec<Value>,
     coloring: HashMap<Value, usize>,
+    subcircuit: &SubCircuitInfo,
 ) -> Result<WireAllocation> {
     // Validate all values were colored.
     for value in &values {
@@ -267,12 +273,24 @@ fn convert_to_wire_allocation(
 
     let mut operation_wires = HashMap::new();
     let mut input_wires = HashMap::new();
-    let mut max_color = 0;
+    let mut subcircuit_max_wires: HashMap<usize, usize> = HashMap::new();
 
     for (value, color) in coloring {
-        max_color = max_color.max(color);
         let wire = Wire::new(color);
 
+        // Determine which subcircuit this value belongs to
+        let subcircuit_id = match value {
+            Value::Gate(op) => subcircuit.operation_subcircuit(&op)?,
+            Value::Input(input) => subcircuit.input_subcircuit(&input)?,
+        };
+
+        // Track max wire ID for this subcircuit
+        subcircuit_max_wires
+            .entry(subcircuit_id)
+            .and_modify(|max| *max = (*max).max(color))
+            .or_insert(color);
+
+        // Store wire assignment
         match value {
             Value::Gate(op) => {
                 operation_wires.insert(op, wire);
@@ -283,10 +301,16 @@ fn convert_to_wire_allocation(
         }
     }
 
+    // Convert max wire IDs to wire counts (max_id + 1)
+    let subcircuit_wire_counts = subcircuit_max_wires
+        .into_iter()
+        .map(|(id, max_wire)| (id, max_wire + 1))
+        .collect();
+
     Ok(WireAllocation {
         operation_wires,
         input_wires,
-        wire_count: max_color + 1,
+        subcircuit_wire_counts,
     })
 }
 
@@ -338,7 +362,7 @@ mod tests {
         let mut analyzer = Analyzer::new();
         let allocation = analyzer.get::<WireAllocationAnalysis>(&circuit).unwrap();
 
-        assert_eq!(allocation.wire_count, 1);
+        assert_eq!(allocation.subcircuit_wire_count(0).unwrap(), 1);
         assert!(allocation.input_wire(&input).is_some());
         assert!(allocation.operation_wire(&GateId::new(gate.id())).is_some());
 
@@ -370,7 +394,7 @@ mod tests {
         let mut analyzer = Analyzer::new();
         let allocation = analyzer.get::<WireAllocationAnalysis>(&circuit).unwrap();
 
-        assert_eq!(allocation.wire_count, 2);
+        assert_eq!(allocation.subcircuit_wire_count(0).unwrap(), 2);
     }
 
     #[test]
@@ -393,7 +417,7 @@ mod tests {
         let allocation = analyzer.get::<WireAllocationAnalysis>(&circuit).unwrap();
 
         // Sequential circuit should reuse wires efficiently
-        assert!(allocation.wire_count <= 2);
+        assert!(allocation.subcircuit_wire_count(0).unwrap() <= 2);
     }
 
     #[test]
@@ -459,10 +483,11 @@ mod tests {
         // With the fixed liveness analysis, input2 starts living at step 2 (when addition executes)
         // By that time, input1 and negate1 are dead, so their wires can be reused
         // We should need at most 2-3 wires total (not 5).
+        let wire_count = allocation.subcircuit_wire_count(0).unwrap();
         assert!(
-            allocation.wire_count <= 3,
+            wire_count <= 3,
             "Expected at most 3 wires, got {}",
-            allocation.wire_count
+            wire_count
         );
 
         // Verify all values got assignments.
@@ -520,12 +545,17 @@ mod tests {
         let mut analyzer = Analyzer::new();
         let allocation = analyzer.get::<WireAllocationAnalysis>(&circuit).unwrap();
 
-        // Each linear circuit needs 1 wire. Since they're disjoint, they can share.
-        // Total should be 1, not 2.
+        // Each linear circuit needs 1 wire. Since they're disjoint, each subcircuit can use wire 0.
+        // Each subcircuit should need only 1 wire.
         assert_eq!(
-            allocation.wire_count, 1,
-            "Expected 1 wire for disjoint circuits, got {}",
-            allocation.wire_count
+            allocation.subcircuit_wire_count(0).unwrap(),
+            1,
+            "Expected 1 wire for first subcircuit"
+        );
+        assert_eq!(
+            allocation.subcircuit_wire_count(1).unwrap(),
+            1,
+            "Expected 1 wire for second subcircuit"
         );
 
         // Verify all values got assignments.
