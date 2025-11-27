@@ -65,6 +65,8 @@ pub enum Error {
     SubCircuitGateNotFound(GateId),
     /// An input was not found in sub-circuit information.
     SubCircuitInputNotFound(InputId),
+    /// A subcircuit ID was not found in wire allocation.
+    SubCircuitNotFound(usize),
     /// A value was not assigned a wire color during wire allocation.
     WireAllocationValueNotColored,
     /// Failed to find an available wire color during allocation.
@@ -128,6 +130,9 @@ impl std::fmt::Display for Error {
                     input
                 )
             }
+            Error::SubCircuitNotFound(id) => {
+                write!(f, "SubCircuit {} not found in wire allocation", id)
+            }
             Error::WireAllocationValueNotColored => {
                 write!(
                     f,
@@ -184,6 +189,9 @@ impl std::fmt::Debug for Error {
             }
             Error::SubCircuitInputNotFound(input) => {
                 write!(f, "SubCircuitInputNotFound({:?})", input)
+            }
+            Error::SubCircuitNotFound(id) => {
+                write!(f, "SubCircuitNotFound({})", id)
             }
             Error::WireAllocationValueNotColored => {
                 write!(f, "WireAllocationValueNotColored")

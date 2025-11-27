@@ -4,3 +4,5 @@ pub mod analyzer;
 pub mod builder;
 pub mod circuit;
 pub mod optimizer;
+pub mod plan;
+pub mod scheduler;

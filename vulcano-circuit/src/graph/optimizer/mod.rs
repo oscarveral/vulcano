@@ -54,6 +54,17 @@ impl<T: Gate> Optimizer<T> {
         }
         Ok(circuit)
     }
+
+    /// Convert this optimizer into a scheduler, transferring the analyzer.
+    ///
+    /// This allows the scheduler to reuse any cached analyses from the
+    /// optimization phase, avoiding expensive recomputation.
+    pub fn into_scheduler(self) -> super::scheduler::Scheduler<T>
+    where
+        T: Clone,
+    {
+        super::scheduler::Scheduler::new(self.analyzer)
+    }
 }
 
 impl<T: Gate> Default for Optimizer<T> {

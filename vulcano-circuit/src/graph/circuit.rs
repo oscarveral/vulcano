@@ -16,7 +16,12 @@ use crate::{
     handles::{GateId, InputId, OutputId, Value},
 };
 
-/// Represents a computation circuit as a directed acyclic graph (DAG).
+/// Type alias for the components of a circuit.
+///
+/// Contains (gate_entries, input_count, connected_outputs).
+pub type CircuitParts<T> = (Vec<(T, Vec<Value>)>, usize, Vec<GateId>);
+
+/// Represents a finalized computation circuit. as a directed acyclic graph (DAG).
 ///
 /// The circuit is generic over the gate type `T`, which must implement
 /// the [`Gate`] trait. Each gate in the circuit is associated with its
@@ -90,5 +95,17 @@ impl<T: Gate> Circuit<T> {
     /// outputs in the circuit (from 0 to `output_count - 1`).
     pub fn outputs(&self) -> impl Iterator<Item = OutputId> {
         (0..self.output_count()).map(OutputId::new)
+    }
+
+    /// Returns a reference to the output connections.
+    pub fn output_connections(&self) -> &[GateId] {
+        &self.connected_outputs
+    }
+
+    /// Consumes the circuit and returns all its components.
+    ///
+    /// Returns (gate_entries, input_count, connected_outputs).
+    pub fn into_parts(self) -> CircuitParts<T> {
+        (self.gate_entries, self.input_count, self.connected_outputs)
     }
 }
