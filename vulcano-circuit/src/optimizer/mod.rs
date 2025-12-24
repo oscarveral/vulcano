@@ -5,17 +5,11 @@
 //! analyses provided by the [`Analyzer`] module to make informed
 //! decisions about circuit transformations.
 
-pub mod passes;
-#[cfg(test)]
-mod tests;
+mod passes;
 
 use std::any::TypeId;
 
-use crate::{
-    error::Result,
-    gate::Gate,
-    graph::{analyzer::Analyzer, circuit::Circuit},
-};
+use crate::{analyzer::Analyzer, circuit::Circuit, error::Result, gate::Gate};
 
 /// A type alias for an optimizer pass function.
 ///
@@ -24,14 +18,14 @@ use crate::{
 type OptimizerPass<T> = fn(Circuit<T>, &mut Analyzer<T>) -> Result<(Circuit<T>, Vec<TypeId>)>;
 
 /// Struct that manages and applies optimization passes to circuits.
-pub struct Optimizer<T: Gate> {
+struct Optimizer<T: Gate> {
     analyzer: Analyzer<T>,
     passes: Vec<OptimizerPass<T>>,
 }
 
 impl<T: Gate> Optimizer<T> {
     /// Creates a new optimizer instance.
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             analyzer: Analyzer::new(),
             passes: Vec::new(),
@@ -39,12 +33,12 @@ impl<T: Gate> Optimizer<T> {
     }
 
     /// Adds an optimization pass to the optimizer.
-    pub fn add_pass(&mut self, pass: OptimizerPass<T>) {
+    fn add_pass(&mut self, pass: OptimizerPass<T>) {
         self.passes.push(pass);
     }
 
     /// Runs all optimization passes on the given circuit.
-    pub fn optimize(&mut self, mut circuit: Circuit<T>) -> Result<Circuit<T>> {
+    fn optimize(&mut self, mut circuit: Circuit<T>) -> Result<Circuit<T>> {
         for pass in &self.passes {
             let (optimized_circuit, preserved_analyses) = pass(circuit, &mut self.analyzer)?;
             circuit = optimized_circuit;
@@ -53,17 +47,6 @@ impl<T: Gate> Optimizer<T> {
                 .invalidate_except(preserved_analyses.as_slice());
         }
         Ok(circuit)
-    }
-
-    /// Convert this optimizer into a scheduler, transferring the analyzer.
-    ///
-    /// This allows the scheduler to reuse any cached analyses from the
-    /// optimization phase, avoiding expensive recomputation.
-    pub fn into_scheduler(self) -> super::scheduler::Scheduler<T>
-    where
-        T: Clone,
-    {
-        super::scheduler::Scheduler::new(self.analyzer)
     }
 }
 

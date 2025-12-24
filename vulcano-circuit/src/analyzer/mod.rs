@@ -6,15 +6,12 @@
 //! the [`Analysis`] trait. The analyses can be run using the
 //! `Analyzer` struct, which caches results for efficiency.
 
-pub mod analyses;
-
-#[cfg(test)]
-mod tests;
+mod analyses;
 
 use crate::{
+    circuit::Circuit,
     error::{Error, Result},
     gate::Gate,
-    graph::circuit::Circuit,
 };
 use std::{
     any::{Any, TypeId},
@@ -23,7 +20,7 @@ use std::{
 };
 
 /// Trait for analyses that can be performed on circuits.
-pub trait Analysis: 'static {
+trait Analysis: 'static {
     /// The output type of the analysis.
     type Output;
     /// Run the analysis on the given circuit using the provided analyzer for recursive dependant analyses.
@@ -31,7 +28,7 @@ pub trait Analysis: 'static {
 }
 
 /// Struct that manages and caches analyses on circuits.
-pub struct Analyzer<T: Gate> {
+pub(super) struct Analyzer<T: Gate> {
     /// Cache mapping [`TypeId`] of analyses to their results.
     cache: HashMap<TypeId, Rc<dyn Any>>,
     /// Phantom data to associate with the gate type.
@@ -40,7 +37,7 @@ pub struct Analyzer<T: Gate> {
 
 impl<T: Gate> Analyzer<T> {
     /// Create a new [`Analyzer`].
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             cache: HashMap::new(),
             _marker: std::marker::PhantomData,
@@ -48,7 +45,7 @@ impl<T: Gate> Analyzer<T> {
     }
 
     /// Get the result of an analysis, computing and caching it if necessary.
-    pub fn get<A>(&mut self, circuit: &Circuit<T>) -> Result<Rc<A::Output>>
+    fn get<A>(&mut self, circuit: &Circuit<T>) -> Result<Rc<A::Output>>
     where
         A: Analysis,
     {
@@ -58,7 +55,7 @@ impl<T: Gate> Analyzer<T> {
             return self
                 .cache
                 .get(&key)
-                .ok_or(Error::AnalysisCacheMissingEntry(key))?
+                .ok_or(Error::AnalysisCacheInconsistentEntry(key))?
                 .clone()
                 .downcast::<A::Output>()
                 .map_err(|_| Error::AnalysisCacheTypeMismatch(key));
@@ -70,19 +67,19 @@ impl<T: Gate> Analyzer<T> {
 
         self.cache
             .get(&key)
-            .ok_or(Error::AnalysisCacheMissingEntry(key))?
+            .ok_or(Error::AnalysisCacheInconsistentEntry(key))?
             .clone()
             .downcast::<A::Output>()
             .map_err(|_| Error::AnalysisCacheTypeMismatch(key))
     }
 
     /// Invalidate all cached analyses.
-    pub fn invalidate_all(&mut self) {
+    fn invalidate_all(&mut self) {
         self.cache.clear();
     }
 
     /// Invalidate all cached analyses except for the ones with the given [`TypeId`]s.
-    pub fn invalidate_except(&mut self, preserved: &[TypeId]) {
+    pub(super) fn invalidate_except(&mut self, preserved: &[TypeId]) {
         self.cache.retain(|key, _| preserved.contains(key));
     }
 }

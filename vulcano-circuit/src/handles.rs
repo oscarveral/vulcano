@@ -8,99 +8,153 @@
 
 /// Handle identifying a gate/operation in a circuit.
 ///
-/// A [`GateId`] is a compact newtype-like wrapper around a numeric
-/// index. Use [`GateId`] when referring to the producer of a value
+/// A gate id is a compact newtype-like wrapper around a numeric
+/// index. Use gate ids when referring to the producer of a value
 /// (the gate).
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
-pub struct GateId {
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub(super) struct GateId {
     id: usize,
 }
 
 impl GateId {
-    /// Create a new [`GateId`] handle from a numeric index.
-    pub fn new(id: usize) -> Self {
+    /// Create a new gate id from a numeric index.
+    pub(super) fn new(id: usize) -> Self {
         Self { id }
     }
 
     /// Return the numeric index used internally for this handle.
-    pub fn id(&self) -> usize {
+    pub(super) fn id(&self) -> usize {
         self.id
     }
 }
 
 /// Handle identifying an input slot for the circuit.
 ///
-/// An [`InputId`] represents an externally-provided input value. It is used
+/// An input id represents an externally-provided input value. It is used
 /// when wiring builders or when mapping runtime inputs into the
 /// execution plan.
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
-pub struct InputId {
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub(super) struct InputId {
     id: usize,
 }
 
 impl InputId {
-    /// Create a new [`InputId`] handle from a numeric index.
-    pub fn new(id: usize) -> Self {
+    /// Create a new input id from a numeric index.
+    pub(super) fn new(id: usize) -> Self {
         Self { id }
     }
 
     /// Return the numeric index used internally for this handle.
-    pub fn id(&self) -> usize {
+    pub(super) fn id(&self) -> usize {
         self.id
     }
 }
 
 /// Handle identifying an exported output slot of the circuit.
 ///
-/// An [`OutputId`] represents an externally-visible output value. It is used
+/// An output id represents an externally-visible output value. It is used
 /// when wiring builders or when mapping runtime outputs from the
 /// execution plan.
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
-pub struct OutputId {
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub(super) struct OutputId {
     id: usize,
 }
 
 impl OutputId {
-    /// Create a new [`OutputId`] handle from a numeric index.
-    pub fn new(id: usize) -> Self {
+    /// Create a new output id from a numeric index.
+    pub(super) fn new(id: usize) -> Self {
         Self { id }
     }
 
     /// Return the numeric index used internally for this handle.
-    pub fn id(&self) -> usize {
+    pub(super) fn id(&self) -> usize {
         self.id
     }
 }
 
-/// Low-level runtime handle representing storage (a wire/register).
-///
-/// A [`Wire`] represents a runtime storage location used to hold
-/// intermediate values produced and consumed by gates during execution.
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
-pub struct Wire {
+/// Handle identifying a internal node in the circuit.
+#[derive(PartialEq, Eq, Clone, Copy, Hash)]
+pub(super) struct NodeId {
     id: usize,
 }
 
-impl Wire {
-    /// Create a new [`Wire`] handle from a numeric index.
-    pub fn new(id: usize) -> Self {
+impl NodeId {
+    /// Create a new node id from a numeric index.
+    pub(super) fn new(id: usize) -> Self {
         Self { id }
     }
 
     /// Return the numeric index used internally for this handle.
-    pub fn id(&self) -> usize {
+    pub(super) fn id(&self) -> usize {
         self.id
     }
 }
 
-/// Represents a value flowing through the circuit.
-///
-/// A [`Value`] can be either a circuit input or the output of a gate.
-/// This is the primary way dependencies between gates are represented in the IR.
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
-pub enum Value {
-    /// The value comes from a circuit input slot.
+/// Handle identifying a internal port in the circuit.
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub(super) struct PortId {
+    id: usize,
+}
+
+impl PortId {
+    /// Create a new port id from a numeric index.
+    pub(super) fn new(id: usize) -> Self {
+        Self { id }
+    }
+
+    /// Return the numeric index used internally for this handle.
+    pub(super) fn id(&self) -> usize {
+        self.id
+    }
+}
+
+/// A source of a value in the circuit.
+pub(super) enum Source {
+    Gate { gate: GateId, port: PortId },
     Input(InputId),
-    /// The value comes from a gate's output.
-    Gate(GateId),
+}
+
+impl From<(GateId, PortId)> for Source {
+    fn from(value: (GateId, PortId)) -> Self {
+        Self::Gate {
+            gate: value.0,
+            port: value.1,
+        }
+    }
+}
+
+impl From<InputId> for Source {
+    fn from(value: InputId) -> Self {
+        Self::Input(value)
+    }
+}
+
+/// A destination of a value in the circuit.
+pub(super) enum Destination {
+    Gate { gate: GateId, port: PortId },
+    Output(OutputId),
+}
+
+impl From<(GateId, PortId)> for Destination {
+    fn from(value: (GateId, PortId)) -> Self {
+        Self::Gate {
+            gate: value.0,
+            port: value.1,
+        }
+    }
+}
+
+impl From<OutputId> for Destination {
+    fn from(value: OutputId) -> Self {
+        Self::Output(value)
+    }
+}
+
+/// Access mode for a value in the circuit.
+/// Use by the gates to indicate how they will access the value.
+pub(super) enum AccessMode {
+    /// The specified value is borrowed.
+    Borrow,
+    /// The specified value is moved, an therefore consumed by the gate.
+    Move,
 }

@@ -1,7 +1,9 @@
 //! High-level primitives for building, manipulating and evaluating computation circuits
 //! composed of arbitrary gates.
 
-pub mod error;
-pub mod gate;
-pub mod graph;
-pub mod handles;
+mod analyzer;
+mod circuit;
+mod error;
+mod gate;
+mod handles;
+mod optimizer;

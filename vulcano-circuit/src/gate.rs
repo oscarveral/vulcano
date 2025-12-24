@@ -1,39 +1,64 @@
 //! Gate trait and helpers
 //!
-//! This module defines the minimal [`Gate`] trait used by the circuit
-//! representation. A gate is a small pure value that describes an
-//! operation (for example: an adder, a boolean AND, a constant loader,
-//! etc.). The circuit uses implementations of [`Gate`] when building and
-//! executing the computation graph.
-//!
-//! Conventions:
-//! - Implementations should make [`Gate::arity`] and [`Gate::name`] cheap
-//!   to call.
-//! - A gate is expected to produce exactly one output value. That single
-//!   output may be consumed multiple times by downstream gates (fan-out is
-//!   supported at the circuit level).
+//! This module defines the minimal traits needed to define, create
+//! and compile computational circuits.
+
+use std::num::NonZeroUsize;
+
+use crate::{error::Result, handles::AccessMode};
 
 /// Trait implemented by a gate used inside a circuit.
 ///
-/// A [`Gate`] is a small descriptor for an operation node. The circuit
-/// machinery can query the gate for its [`Gate::arity`] and its [`Gate::name`].
-/// Gates are expected to produce a single output value; the circuit model handles
-/// fan-out (multiple consumers of that output).
-///
-/// Keeping this trait minimal keeps gate implementations simple and
-/// allows the circuit code to remain generic over the concrete gate
-/// type.
-pub trait Gate {
+/// A gate is a small descriptor for an operation node.
+/// Intended to be an enum of all possible gate types.
+pub(super) trait Gate: Eq + Copy {
     /// Number of inputs the gate consumes.
+    /// This can be though as the number of input ports.
     ///
-    /// For a binary adder this would be `2`, for a unary negation `1`,
-    /// and for a constant-producing gate `0`.
-    fn arity(&self) -> usize;
+    /// For a binary adder this would be `2`, for a unary negation `1`.
+    fn input_count(&self) -> NonZeroUsize;
 
-    /// A human-readable name for the gate.
+    /// Number of outputs the gate produces.
+    /// This can be though as the number of output ports.
     ///
-    /// This is used in debugging, logging and textual dumps of the
-    /// circuit. Implementations should return a short, descriptive
-    /// string slice (often a static string).
-    fn name(&self) -> &str;
+    /// For a binary adder this would be `1`, for a unary negation `1`.
+    /// For thigs like hoisted rotations could be more.
+    fn output_count(&self) -> NonZeroUsize;
+
+    /// The type of the operands this gate consumes.
+    /// Intended to be an enum of all possible operand types.
+    type Operand: Eq + Copy;
+
+    /// Returns the operand type at the given index.
+    fn input(&self, idx: usize) -> Result<Self::Operand>;
+
+    /// Returns an iterator over all input operands types.
+    fn inputs(&self) -> Result<impl Iterator<Item = Self::Operand>> {
+        (0..self.input_count().get())
+            .map(|idx| self.input(idx))
+            .collect::<Result<Vec<_>>>()
+            .map(|v| v.into_iter())
+    }
+
+    /// Returns the operand type at the given index.
+    fn output(&self, idx: usize) -> Result<Self::Operand>;
+
+    /// Returns an iterator over all output operands types.
+    fn outputs(&self) -> Result<impl Iterator<Item = Self::Operand>> {
+        (0..self.output_count().get())
+            .map(|idx| self.output(idx))
+            .collect::<Result<Vec<_>>>()
+            .map(|v| v.into_iter())
+    }
+
+    /// Returns the access mode for the input at the given index.
+    fn access_mode(&self, idx: usize) -> Result<AccessMode>;
+
+    /// Returns an iterator over all access modes.
+    fn access_modes(&self) -> Result<impl Iterator<Item = AccessMode>> {
+        (0..self.input_count().get())
+            .map(|idx| self.access_mode(idx))
+            .collect::<Result<Vec<_>>>()
+            .map(|v| v.into_iter())
+    }
 }
