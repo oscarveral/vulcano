@@ -69,6 +69,7 @@ impl Analysis for ConnectedComponents {
         }
 
         // Step 4. Union all edges.
+        // Gates: union with sources and destinations.
         for gate_id in circuit.get_gate_ids() {
             let gate = circuit.get_gate(gate_id)?;
             for source in gate.get_sources() {
@@ -76,6 +77,25 @@ impl Analysis for ConnectedComponents {
             }
             for (_, dest) in gate.get_destinations() {
                 union(&mut parent, dest.id(), gate_id.id());
+            }
+        }
+
+        // Clones: union with source and destinations.
+        for clone_id in circuit.get_clone_ids() {
+            let clone_node = circuit.get_clone(clone_id)?;
+            if let Some(source) = clone_node.get_source() {
+                union(&mut parent, source.id(), clone_id.id());
+            }
+            for (_, dest) in clone_node.get_destinations() {
+                union(&mut parent, dest.id(), clone_id.id());
+            }
+        }
+
+        // Drops: union with source.
+        for drop_id in circuit.get_drop_ids() {
+            let drop_node = circuit.get_drop(drop_id)?;
+            if let Some(source) = drop_node.get_source() {
+                union(&mut parent, source.id(), drop_id.id());
             }
         }
 

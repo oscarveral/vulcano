@@ -1,15 +1,13 @@
 //! Topological analysis
 //!
 //! The analysis computes a total ordering of all nodes in the circuit
-//! (inputs, gates, outputs) that respects data dependencies.
+//! (inputs, gates, clones, drops, outputs) that respects data dependencies.
 //! - Inputs: positioned just before their first consumer
-//! - Gates: topologically ordered by dependencies
+//! - Gates/Clones: topologically ordered by dependencies
+//! - Drops: positioned after all their dependencies complete
 //! - Outputs: positioned just after their source
 
-use std::{
-    any::Any,
-    collections::{HashMap, HashSet, VecDeque},
-};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::{
     analyzer::{Analysis, Analyzer},
@@ -21,17 +19,17 @@ use crate::{
 
 /// Topological order of all nodes in the circuit.
 ///
-/// Contains a total ordering of all nodes (inputs, gates, outputs) in execution order.
+/// Contains a total ordering of all nodes (inputs, gates, clones, drops, outputs) in execution order.
 /// Processing nodes in this order guarantees that all dependencies are satisfied.
 pub(super) struct TopologicalOrder {
-    /// The order of all nodes (NodeId), including inputs, gates, and outputs.
+    /// The order of all nodes (NodeId), including inputs, gates, clones, drops, and outputs.
     order: Vec<NodeId>,
 }
 
 impl TopologicalOrder {
     /// Returns the topological order of all nodes.
     ///
-    /// The returned vector contains all node IDs (inputs, gates, outputs) in execution order.
+    /// The returned vector contains all node IDs (inputs, gates, clones, drops, outputs) in execution order.
     pub(super) fn get_order(&self) -> &Vec<NodeId> {
         &self.order
     }
@@ -42,31 +40,48 @@ impl Analysis for TopologicalOrder {
 
     /// Compute the topological order of all nodes using Kahn's algorithm.
     fn run<T: Gate>(circuit: &Circuit<T>, _analyzer: &mut Analyzer<T>) -> Result<Self::Output> {
-        // Step 1. Calculate in-degrees for gates only.
+        // Step 1. Calculate in-degrees for processing nodes (gates, clones, drops).
         let mut in_degrees: HashMap<NodeId, usize> = HashMap::new();
 
-        // Initialize all gates with in-degree 0.
+        // Initialize all gates and clones with in-degree 0.
         for gate_id in circuit.get_gate_ids() {
             in_degrees.insert(gate_id, 0);
         }
+        for clone_id in circuit.get_clone_ids() {
+            in_degrees.insert(clone_id, 0);
+        }
+        // Initialize drops with in-degree = number of dependencies.
+        for drop_id in circuit.get_drop_ids() {
+            let drop_node = circuit.get_drop(drop_id)?;
+            let dep_count = drop_node.get_dependencies().count();
+            in_degrees.insert(drop_id, dep_count);
+        }
 
-        // Count incoming edges from gates.
+        // Count incoming edges from gates to gates/clones.
         for node_id in circuit.get_gate_ids() {
             let node = circuit.get_gate(node_id)?;
-            for consumer in node.get_destinations() {
-                // Only increment if consumer is a gate (inputs/outputs handled separately).
-                if circuit.is_gate(consumer.1)? {
-                    *in_degrees.entry(consumer.1).or_insert(0) += 1;
+            for (_, consumer) in node.get_destinations() {
+                if circuit.is_gate(consumer)? || circuit.is_clone(consumer)? {
+                    *in_degrees.entry(consumer).or_insert(0) += 1;
                 }
             }
         }
 
-        // Count incoming edges from inputs to gates.
+        // Count incoming edges from clones to gates/clones.
+        for clone_id in circuit.get_clone_ids() {
+            let clone_node = circuit.get_clone(clone_id)?;
+            for (_, consumer) in clone_node.get_destinations() {
+                if circuit.is_gate(consumer)? || circuit.is_clone(consumer)? {
+                    *in_degrees.entry(consumer).or_insert(0) += 1;
+                }
+            }
+        }
+
+        // Count incoming edges from inputs to gates/clones.
         for input_id in circuit.get_input_ids() {
             let input = circuit.get_input(input_id)?;
             for consumer in input.get_destinations() {
-                // Only increment if consumer is a gate.
-                if circuit.is_gate(consumer)? {
+                if circuit.is_gate(consumer)? || circuit.is_clone(consumer)? {
                     *in_degrees.entry(consumer).or_insert(0) += 1;
                 }
             }
@@ -87,15 +102,24 @@ impl Analysis for TopologicalOrder {
             output_source.insert(output_id, output.get_source());
         }
 
-        // Step 4. Initialize queue with gates having in-degree 0.
-        let mut queue = VecDeque::new();
-        for (gate_id, &degree) in &in_degrees {
-            if degree == 0 {
-                queue.push_back(*gate_id);
+        // Step 4. Build reverse dependency map: node -> drops that depend on it.
+        let mut drop_dependents: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
+        for drop_id in circuit.get_drop_ids() {
+            let drop_node = circuit.get_drop(drop_id)?;
+            for dep in drop_node.get_dependencies() {
+                drop_dependents.entry(dep).or_default().push(drop_id);
             }
         }
 
-        // Step 5. Process queue with special handling.
+        // Step 5. Initialize queue with nodes having in-degree 0.
+        let mut queue = VecDeque::new();
+        for (node_id, &degree) in &in_degrees {
+            if degree == 0 {
+                queue.push_back(*node_id);
+            }
+        }
+
+        // Step 6. Process queue with special handling.
         let mut final_order = Vec::with_capacity(circuit.node_count());
         let mut processed_inputs = HashSet::new();
         let mut processed_outputs = HashSet::new();
@@ -106,7 +130,7 @@ impl Analysis for TopologicalOrder {
                 Node::Gate {
                     node: gate_internal,
                 } => {
-                    // A. Add inputs where this gate is the first consumer.
+                    // A. Add inputs where this node is the first consumer.
                     for input_id in circuit.get_input_ids() {
                         if !processed_inputs.contains(&input_id) {
                             if let Some(first) = first_consumer.get(&input_id) {
@@ -118,10 +142,10 @@ impl Analysis for TopologicalOrder {
                         }
                     }
 
-                    // B. Add the gate itself.
+                    // B. Add the node itself.
                     final_order.push(node_id);
 
-                    // C. Add outputs where this gate is the source.
+                    // C. Add outputs where this node is the source.
                     for output_id in circuit.get_output_ids() {
                         if !processed_outputs.contains(&output_id) {
                             if let Some(source) = output_source.get(&output_id) {
@@ -133,7 +157,7 @@ impl Analysis for TopologicalOrder {
                         }
                     }
 
-                    // D. Decrease in-degrees and enqueue ready gates.
+                    // D. Decrease in-degrees for data consumers and enqueue ready nodes.
                     for (_, consumer) in gate_internal.get_destinations() {
                         if let Some(degree) = in_degrees.get_mut(&consumer) {
                             *degree -= 1;
@@ -142,6 +166,74 @@ impl Analysis for TopologicalOrder {
                             }
                         }
                     }
+
+                    // E. Decrease in-degrees for drops depending on this node.
+                    if let Some(drops) = drop_dependents.get(&node_id) {
+                        for &drop_id in drops {
+                            if let Some(degree) = in_degrees.get_mut(&drop_id) {
+                                *degree -= 1;
+                                if *degree == 0 {
+                                    queue.push_back(drop_id);
+                                }
+                            }
+                        }
+                    }
+                }
+                Node::Clone {
+                    node: clone_internal,
+                } => {
+                    // A. Add inputs where this clone is the first consumer.
+                    for input_id in circuit.get_input_ids() {
+                        if !processed_inputs.contains(&input_id) {
+                            if let Some(first) = first_consumer.get(&input_id) {
+                                if *first == Some(node_id) {
+                                    final_order.push(input_id);
+                                    processed_inputs.insert(input_id);
+                                }
+                            }
+                        }
+                    }
+
+                    // B. Add the clone itself.
+                    final_order.push(node_id);
+
+                    // C. Add outputs where this clone is the source.
+                    for output_id in circuit.get_output_ids() {
+                        if !processed_outputs.contains(&output_id) {
+                            if let Some(source) = output_source.get(&output_id) {
+                                if *source == Some(node_id) {
+                                    final_order.push(output_id);
+                                    processed_outputs.insert(output_id);
+                                }
+                            }
+                        }
+                    }
+
+                    // D. Decrease in-degrees for data consumers and enqueue ready nodes.
+                    for (_, consumer) in clone_internal.get_destinations() {
+                        if let Some(degree) = in_degrees.get_mut(&consumer) {
+                            *degree -= 1;
+                            if *degree == 0 {
+                                queue.push_back(consumer);
+                            }
+                        }
+                    }
+
+                    // E. Decrease in-degrees for drops depending on this node.
+                    if let Some(drops) = drop_dependents.get(&node_id) {
+                        for &drop_id in drops {
+                            if let Some(degree) = in_degrees.get_mut(&drop_id) {
+                                *degree -= 1;
+                                if *degree == 0 {
+                                    queue.push_back(drop_id);
+                                }
+                            }
+                        }
+                    }
+                }
+                Node::Drop { .. } => {
+                    // Drop nodes: add to order when all dependencies complete.
+                    final_order.push(node_id);
                 }
                 Node::Input { .. } => {
                     // Inputs should not appear in queue - they're added before first consumer.
@@ -154,14 +246,14 @@ impl Analysis for TopologicalOrder {
             }
         }
 
-        // Step 6. Add any remaining inputs that weren't consumed by any gate.
+        // Step 7. Add any remaining inputs that weren't consumed by any node.
         for input_id in circuit.get_input_ids() {
             if !processed_inputs.contains(&input_id) {
                 final_order.push(input_id);
             }
         }
 
-        // Step 7. Check for cycles.
+        // Step 8. Check for cycles.
         if final_order.len() != circuit.node_count() {
             return Err(Error::CycleDetected);
         }

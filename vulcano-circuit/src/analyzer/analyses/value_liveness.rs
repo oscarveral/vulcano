@@ -110,8 +110,34 @@ impl Analysis for LivenessAnalysis {
 
                     liveness.extend(outputs_livenesses);
                 }
-                _ => {
-                    // Outputs nodes do not produce any value.
+                Node::Clone { node: clone_node } => {
+                    let birth = node_to_topo[node_id.id()];
+
+                    // Clone produces N outputs, one liveness entry per output port.
+                    let clone_outputs = clone_node.output_count();
+                    let mut outputs_livenesses = Vec::with_capacity(clone_outputs);
+                    for i in 0..clone_outputs {
+                        outputs_livenesses.push(Liveness {
+                            producer: *node_id,
+                            port: Some(PortId::new(i)),
+                            birth,
+                            death: birth,
+                        });
+                    }
+
+                    for (port, consumer) in clone_node.get_destinations() {
+                        let candidate_death = node_to_topo[consumer.id()];
+                        if candidate_death >= outputs_livenesses[port.id()].death {
+                            outputs_livenesses[port.id()].death = candidate_death;
+                        } else {
+                            return Err(Error::InconsistentOrder);
+                        }
+                    }
+
+                    liveness.extend(outputs_livenesses);
+                }
+                Node::Output { .. } | Node::Drop { .. } => {
+                    // Output and Drop nodes do not produce any value.
                 }
             }
         }
