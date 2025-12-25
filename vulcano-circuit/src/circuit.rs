@@ -18,12 +18,6 @@ pub(super) struct Edge {
     port: PortId,
 }
 
-/// A link between nodes where one of them is not a gate.
-pub(super) struct Link {
-    /// The node id of the other node.
-    node: NodeId,
-}
-
 /// A gate node.
 pub(super) struct GateInternal<T: Gate> {
     /// The gate that this node represents.
@@ -49,6 +43,15 @@ impl<T: Gate> GateInternal<T> {
             .filter_map(|edge| edge.as_ref().map(|edge| edge.node))
     }
 
+    /// Get the source nodes with their output ports.
+    /// Returns (this_gate_input_port, source_node, source_output_port).
+    pub(super) fn get_sources_with_ports(&self) -> impl Iterator<Item = (usize, NodeId, PortId)> {
+        self.sources
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, edge)| edge.as_ref().map(|edge| (idx, edge.node, edge.port)))
+    }
+
     /// Get the destination nodes of a gate.
     pub(super) fn get_destinations(&self) -> impl Iterator<Item = (PortId, NodeId)> {
         self.destinations
@@ -60,26 +63,38 @@ impl<T: Gate> GateInternal<T> {
 /// An input node.
 pub(super) struct InputInternal {
     /// The destinations of this node.
-    destinations: Vec<Link>,
+    /// Each edge stores (consumer_node, consumer_input_port).
+    destinations: Vec<Edge>,
 }
 
 impl InputInternal {
     /// Get the destination nodes of an input.
     pub(super) fn get_destinations(&self) -> impl Iterator<Item = NodeId> {
-        self.destinations.iter().map(|link| link.node)
+        self.destinations.iter().map(|edge| edge.node)
+    }
+
+    /// Get the destination nodes with their input ports.
+    pub(super) fn get_destinations_with_ports(&self) -> impl Iterator<Item = (NodeId, PortId)> {
+        self.destinations.iter().map(|edge| (edge.node, edge.port))
     }
 }
 
 /// An output node.
 pub(super) struct OutputInternal {
     /// The source of this node.
-    source: Option<Link>,
+    /// The edge stores (producer_node, producer_output_port).
+    source: Option<Edge>,
 }
 
 impl OutputInternal {
     /// Get the source node of an output.
     pub(super) fn get_source(&self) -> Option<NodeId> {
-        self.source.as_ref().map(|link| link.node)
+        self.source.as_ref().map(|edge| edge.node)
+    }
+
+    /// Get the source node with its output port.
+    pub(super) fn get_source_with_port(&self) -> Option<(NodeId, PortId)> {
+        self.source.as_ref().map(|edge| (edge.node, edge.port))
     }
 }
 
@@ -304,8 +319,9 @@ impl<T: Gate> Circuit<T> {
             Node::Input {
                 node: input_instance,
             } => {
-                input_instance.destinations.push(Link {
+                input_instance.destinations.push(Edge {
                     node: dst_internal_index,
+                    port: dst_port,
                 });
             }
             _ => return Err(Error::NodeMissmatched(src_internal_index)),
@@ -325,8 +341,9 @@ impl<T: Gate> Circuit<T> {
             Node::Output {
                 node: output_instance,
             } => {
-                output_instance.source = Some(Link {
+                output_instance.source = Some(Edge {
                     node: src_internal_index,
+                    port: src_port,
                 });
             }
             _ => {

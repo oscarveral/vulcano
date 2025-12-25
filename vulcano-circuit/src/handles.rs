@@ -91,7 +91,7 @@ impl NodeId {
 }
 
 /// Handle identifying a internal port in the circuit.
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy, Hash)]
 pub(super) struct PortId {
     id: usize,
 }

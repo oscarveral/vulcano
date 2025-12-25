@@ -4,7 +4,7 @@
 //! Computes the liveness of each value produced in the circuit.
 
 use crate::{
-    analyzer::{Analysis, Analyzer, analyses::topological::TopologicalOrder},
+    analyzer::{Analysis, Analyzer, analyses::topological_order::TopologicalOrder},
     circuit::{Circuit, Node},
     error::{Error, Result},
     gate::Gate,

@@ -5,7 +5,7 @@
 //! does some gate computation over them, and emits some outputs.
 
 use crate::{
-    analyzer::{Analysis, Analyzer, analyses::connected::ConnectedComponents},
+    analyzer::{Analysis, Analyzer, analyses::connected_components::ConnectedComponents},
     circuit::Circuit,
     error::Result,
     gate::Gate,
