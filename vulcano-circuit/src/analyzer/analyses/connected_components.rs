@@ -91,14 +91,6 @@ impl Analysis for ConnectedComponents {
             }
         }
 
-        // Drops: union with source.
-        for drop_id in circuit.get_drop_ids() {
-            let drop_node = circuit.get_drop(drop_id)?;
-            if let Some(source) = drop_node.get_source() {
-                union(&mut parent, source.id(), drop_id.id());
-            }
-        }
-
         // Step 5. Normalize components.
         for i in 0..node_count {
             parent[i] = find(&mut parent, i);

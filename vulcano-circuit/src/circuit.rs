@@ -132,35 +132,6 @@ impl CloneInternal {
     }
 }
 
-/// A drop node that consumes a value.
-///
-/// They take ownership of the input value and produce nothing,
-/// marking the value's destruction.
-pub(super) struct DropInternal {
-    /// The source of the value to drop (moved, takes ownership).
-    source: Option<Edge>,
-    /// Dependencies: nodes that must complete before this Drop executes.
-    /// Typically all borrowers of the value being dropped.
-    dependencies: Vec<NodeId>,
-}
-
-impl DropInternal {
-    /// Get the source node of the drop.
-    pub(super) fn get_source(&self) -> Option<NodeId> {
-        self.source.as_ref().map(|edge| edge.node)
-    }
-
-    /// Get the source node with its output port.
-    pub(super) fn get_source_with_port(&self) -> Option<(NodeId, PortId)> {
-        self.source.as_ref().map(|edge| (edge.node, edge.port))
-    }
-
-    /// Get the dependency nodes that must complete before Drop.
-    pub(super) fn get_dependencies(&self) -> impl Iterator<Item = NodeId> {
-        self.dependencies.iter().copied()
-    }
-}
-
 /// A node in the circuit.
 pub(super) enum Node<T: Gate> {
     /// A gate node.
@@ -171,8 +142,6 @@ pub(super) enum Node<T: Gate> {
     Output { node: OutputInternal },
     /// A clone node.
     Clone { node: CloneInternal },
-    /// A drop node.
-    Drop { node: DropInternal },
 }
 
 /// A circuit containing a set of nodes with their connections.
@@ -191,9 +160,6 @@ pub(super) struct Circuit<T: Gate> {
     /// The clone nodes of the circuit.
     /// Indices of the nodes that are clones.
     clones: Vec<NodeId>,
-    /// The drop nodes of the circuit.
-    /// Indices of the nodes that are drops.
-    drops: Vec<NodeId>,
 }
 
 impl<T: Gate> Circuit<T> {
@@ -205,7 +171,6 @@ impl<T: Gate> Circuit<T> {
             outputs: Vec::new(),
             gates: Vec::new(),
             clones: Vec::new(),
-            drops: Vec::new(),
         }
     }
 
@@ -553,19 +518,6 @@ impl<T: Gate> Circuit<T> {
         }
     }
 
-    /// Get the drop at the given [`NodeId`].
-    pub(super) fn get_drop(&self, node: NodeId) -> Result<&DropInternal> {
-        if node.id() >= self.nodes.len() {
-            return Err(Error::NodeNotFound(node));
-        }
-        match &self.nodes[node.id()] {
-            Node::Drop {
-                node: internal_repr,
-            } => Ok(internal_repr),
-            _ => Err(Error::NodeMissmatched(node)),
-        }
-    }
-
     /// Returns true if the node is a clone.
     pub(super) fn is_clone(&self, node: NodeId) -> Result<bool> {
         if node.id() >= self.nodes.len() {
@@ -574,31 +526,13 @@ impl<T: Gate> Circuit<T> {
         Ok(matches!(&self.nodes[node.id()], Node::Clone { .. }))
     }
 
-    /// Returns true if the node is a drop.
-    pub(super) fn is_drop(&self, node: NodeId) -> Result<bool> {
-        if node.id() >= self.nodes.len() {
-            return Err(Error::NodeNotFound(node));
-        }
-        Ok(matches!(&self.nodes[node.id()], Node::Drop { .. }))
-    }
-
     /// Get all [`NodeId`] of the circuit clones.
     pub(super) fn get_clone_ids(&self) -> impl Iterator<Item = NodeId> {
         self.clones.iter().copied()
     }
 
-    /// Get all [`NodeId`] of the circuit drops.
-    pub(super) fn get_drop_ids(&self) -> impl Iterator<Item = NodeId> {
-        self.drops.iter().copied()
-    }
-
     /// Returns the number of clones in the circuit.
     pub(super) fn clone_count(&self) -> usize {
         self.clones.len()
-    }
-
-    /// Returns the number of drops in the circuit.
-    pub(super) fn drop_count(&self) -> usize {
-        self.drops.len()
     }
 }

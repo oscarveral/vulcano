@@ -136,8 +136,8 @@ impl Analysis for LivenessAnalysis {
 
                     liveness.extend(outputs_livenesses);
                 }
-                Node::Output { .. } | Node::Drop { .. } => {
-                    // Output and Drop nodes do not produce any value.
+                Node::Output { .. } => {
+                    // Output nodes do not produce any value.
                 }
             }
         }
