@@ -1,7 +1,5 @@
 //! Generational arena implementation.
 
-use std::marker::PhantomData;
-
 use crate::key::Key;
 
 /// Internal slot: either occupied with a value or free.
@@ -49,7 +47,7 @@ impl<T> Arena<T> {
     }
 
     /// Insert a value into the arena, returning its key.
-    pub fn insert(&mut self, value: T) -> Key<T> {
+    pub fn insert(&mut self, value: T) -> Key {
         self.len += 1;
 
         if let Some(index) = self.free_head {
@@ -66,11 +64,7 @@ impl<T> Arena<T> {
                 Slot::Occupied { .. } => unreachable!("free_head pointed to occupied slot"),
             };
             *slot = Slot::Occupied { value, generation };
-            Key {
-                index,
-                generation,
-                _marker: PhantomData,
-            }
+            Key { index, generation }
         } else {
             // Grow the arena.
             let index = self.slots.len() as u32;
@@ -81,13 +75,12 @@ impl<T> Arena<T> {
             Key {
                 index,
                 generation: 0,
-                _marker: PhantomData,
             }
         }
     }
 
     /// Remove the value associated with the key, returning it if valid.
-    pub fn remove(&mut self, key: Key<T>) -> Option<T> {
+    pub fn remove(&mut self, key: Key) -> Option<T> {
         let slot = self.slots.get_mut(key.index as usize)?;
 
         match slot {
@@ -113,7 +106,7 @@ impl<T> Arena<T> {
     }
 
     /// Get a reference to the value associated with the key.
-    pub fn get(&self, key: Key<T>) -> Option<&T> {
+    pub fn get(&self, key: Key) -> Option<&T> {
         match self.slots.get(key.index as usize)? {
             Slot::Occupied { value, generation } if *generation == key.generation => Some(value),
             _ => None,
@@ -121,7 +114,7 @@ impl<T> Arena<T> {
     }
 
     /// Get a mutable reference to the value associated with the key.
-    pub fn get_mut(&mut self, key: Key<T>) -> Option<&mut T> {
+    pub fn get_mut(&mut self, key: Key) -> Option<&mut T> {
         match self.slots.get_mut(key.index as usize)? {
             Slot::Occupied { value, generation } if *generation == key.generation => Some(value),
             _ => None,
@@ -129,7 +122,7 @@ impl<T> Arena<T> {
     }
 
     /// Check if a key is valid (points to an occupied slot with matching generation).
-    pub fn contains(&self, key: Key<T>) -> bool {
+    pub fn contains(&self, key: Key) -> bool {
         self.get(key).is_some()
     }
 
@@ -156,7 +149,7 @@ impl<T> Arena<T> {
     }
 
     /// Iterate over all occupied slots, yielding (Key, &T).
-    pub fn iter(&self) -> impl Iterator<Item = (Key<T>, &T)> {
+    pub fn iter(&self) -> impl Iterator<Item = (Key, &T)> {
         self.slots
             .iter()
             .enumerate()
@@ -165,7 +158,6 @@ impl<T> Arena<T> {
                     Key {
                         index: i as u32,
                         generation: *generation,
-                        _marker: PhantomData,
                     },
                     value,
                 )),
@@ -174,7 +166,7 @@ impl<T> Arena<T> {
     }
 
     /// Iterate mutably over all occupied slots, yielding (Key, &mut T).
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (Key<T>, &mut T)> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (Key, &mut T)> {
         self.slots
             .iter_mut()
             .enumerate()
@@ -183,7 +175,6 @@ impl<T> Arena<T> {
                     Key {
                         index: i as u32,
                         generation: *generation,
-                        _marker: PhantomData,
                     },
                     value,
                 )),
