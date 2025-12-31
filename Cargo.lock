@@ -3,6 +3,10 @@
 version = 4
 
 [[package]]
+name = "vulcano-arena"
+version = "0.1.0"
+
+[[package]]
 name = "vulcano-circuit"
 version = "0.1.0"
 
