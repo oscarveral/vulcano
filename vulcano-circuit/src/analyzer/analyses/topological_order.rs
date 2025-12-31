@@ -1,190 +1,96 @@
-//! Topological analysis
+//! Topological Order Analysis
 //!
-//! The analysis computes a total ordering of all nodes in the circuit
-//! (inputs, gates, clones, outputs) that respects data dependencies.
-//! - Inputs: positioned just before their first consumer
-//! - Gates/Clones: topologically ordered by dependencies
-//! - Outputs: positioned just after their source
+//! Computes a valid execution order for circuit operations using Kahn's algorithm.
+//! The order respects data dependencies: an operation appears after all operations
+//! that produce its input values.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 use crate::{
     analyzer::{Analysis, Analyzer},
-    circuit::{Circuit, Node},
+    circuit::{Circuit, Operation},
     error::{Error, Result},
     gate::Gate,
-    handles::NodeId,
 };
 
-/// Topological order of all nodes in the circuit.
-///
-/// Contains a total ordering of all nodes (inputs, gates, clones, outputs) in execution order.
-/// Processing nodes in this order guarantees that all dependencies are satisfied.
-pub(super) struct TopologicalOrder {
-    /// The order of all nodes (NodeId), including inputs, gates, clones, and outputs.
-    order: Vec<NodeId>,
+/// Result of topological order analysis.
+struct TopologicalOrder {
+    /// Operations in valid execution order.
+    order: Vec<Operation>,
 }
 
 impl TopologicalOrder {
-    /// Returns the topological order of all nodes.
-    ///
-    /// The returned vector contains all node IDs (inputs, gates, clones, outputs) in execution order.
-    pub(super) fn get_order(&self) -> &Vec<NodeId> {
+    /// Get the operations in topological order.
+    fn operations(&self) -> &[Operation] {
         &self.order
+    }
+
+    /// Iterate over operations in topological order.
+    fn iter(&self) -> impl Iterator<Item = &Operation> {
+        self.order.iter()
     }
 }
 
 impl Analysis for TopologicalOrder {
     type Output = Self;
 
-    /// Compute the topological order of all nodes using Kahn's algorithm.
-    fn run<T: Gate>(circuit: &Circuit<T>, _analyzer: &mut Analyzer<T>) -> Result<Self::Output> {
-        // Step 1. Calculate in-degrees for processing nodes (gates, clones).
-        let mut in_degrees: HashMap<NodeId, usize> = HashMap::new();
+    fn run<G: Gate>(circuit: &Circuit<G>, _analyzer: &mut Analyzer<G>) -> Result<Self::Output> {
+        // Step 1. Storage used to map each operation to its in-degree.
+        let mut in_degree: HashMap<Operation, usize> = HashMap::new();
 
-        for gate_id in circuit.get_gate_ids() {
-            in_degrees.insert(gate_id, 0);
-        }
-        for clone_id in circuit.get_clone_ids() {
-            in_degrees.insert(clone_id, 0);
+        // Step 2. Initialize all operations with zero in-degree.
+        for op in circuit.all_operations() {
+            in_degree.insert(op, 0);
         }
 
-        // Count incoming edges from gates.
-        for node_id in circuit.get_gate_ids() {
-            let node = circuit.get_gate(node_id)?;
-            for (_, consumer) in node.get_destinations() {
-                if let Some(degree) = in_degrees.get_mut(&consumer) {
-                    *degree += 1;
-                }
+        // Step 3. Build edges: for each value, increment in-degree for each consumer.
+        for (_, value) in circuit.all_values() {
+            for usage in value.get_uses() {
+                let consumer_op: Operation = usage.consumer.into();
+                // Each consumer depends on the producer.
+                *in_degree.entry(consumer_op).or_insert(0) += 1;
             }
         }
 
-        // Count incoming edges from clones.
-        for clone_id in circuit.get_clone_ids() {
-            let clone_node = circuit.get_clone(clone_id)?;
-            for (_, consumer) in clone_node.get_destinations() {
-                if let Some(degree) = in_degrees.get_mut(&consumer) {
-                    *degree += 1;
-                }
+        // Step 4. Kahn's algorithm.
+        let mut queue: VecDeque<Operation> = VecDeque::new();
+        let mut order: Vec<Operation> = Vec::new();
+
+        // Substep A. Start with operations that have no dependencies.
+        for (&op, &deg) in &in_degree {
+            if deg == 0 {
+                queue.push_back(op);
             }
         }
 
-        // Count incoming edges from inputs.
-        for input_id in circuit.get_input_ids() {
-            let input = circuit.get_input(input_id)?;
-            for consumer in input.get_destinations() {
-                if let Some(degree) = in_degrees.get_mut(&consumer) {
-                    *degree += 1;
-                }
-            }
-        }
+        // Substep B. Process each operation in the queue.
+        while let Some(op) = queue.pop_front() {
+            order.push(op);
 
-        // Step 2. Initialize queue with nodes having in-degree 0.
-        let mut queue = VecDeque::new();
-        for (node_id, &degree) in &in_degrees {
-            if degree == 0 {
-                queue.push_back(*node_id);
-            }
-        }
-
-        // Step 3. Process queue.
-        let mut final_order = Vec::with_capacity(circuit.node_count());
-        let mut processed_inputs = HashSet::new();
-        let mut processed_outputs = HashSet::new();
-
-        while let Some(node_id) = queue.pop_front() {
-            let node = circuit.get_node(node_id)?;
-            match node {
-                Node::Gate {
-                    node: gate_internal,
-                } => {
-                    // A. Add any input sources not yet processed.
-                    for source in gate_internal.get_sources() {
-                        if circuit.is_input(source)? && !processed_inputs.contains(&source) {
-                            final_order.push(source);
-                            processed_inputs.insert(source);
-                        }
-                    }
-
-                    // B. Add the node itself.
-                    final_order.push(node_id);
-
-                    // C. Add any output destinations not yet processed.
-                    for (_, dest) in gate_internal.get_destinations() {
-                        if circuit.is_output(dest)? && !processed_outputs.contains(&dest) {
-                            final_order.push(dest);
-                            processed_outputs.insert(dest);
-                        }
-                    }
-
-                    // D. Decrease in-degrees and enqueue ready nodes.
-                    for (_, consumer) in gate_internal.get_destinations() {
-                        if let Some(degree) = in_degrees.get_mut(&consumer) {
-                            *degree -= 1;
-                            if *degree == 0 {
-                                queue.push_back(consumer);
-                            }
+            // Substep C. Find all values produced by this operation and reduce in-degree of consumers.
+            for value_id in circuit.produced_values(op) {
+                let value = circuit.value(value_id)?;
+                for usage in value.get_uses() {
+                    let consumer_op: Operation = usage.consumer.into();
+                    if let Some(deg) = in_degree.get_mut(&consumer_op) {
+                        *deg -= 1;
+                        if *deg == 0 {
+                            queue.push_back(consumer_op);
                         }
                     }
                 }
-                Node::Clone {
-                    node: clone_internal,
-                } => {
-                    // A. Add any input source not yet processed.
-                    if let Some(source) = clone_internal.get_source() {
-                        if circuit.is_input(source)? && !processed_inputs.contains(&source) {
-                            final_order.push(source);
-                            processed_inputs.insert(source);
-                        }
-                    }
-
-                    // B. Add the clone itself.
-                    final_order.push(node_id);
-
-                    // C. Add any output destinations not yet processed.
-                    for (_, dest) in clone_internal.get_destinations() {
-                        if circuit.is_output(dest)? && !processed_outputs.contains(&dest) {
-                            final_order.push(dest);
-                            processed_outputs.insert(dest);
-                        }
-                    }
-
-                    // D. Decrease in-degrees and enqueue ready nodes.
-                    for (_, consumer) in clone_internal.get_destinations() {
-                        if let Some(degree) = in_degrees.get_mut(&consumer) {
-                            *degree -= 1;
-                            if *degree == 0 {
-                                queue.push_back(consumer);
-                            }
-                        }
-                    }
-                }
-                Node::Input { .. } | Node::Output { .. } => {
-                    // These should not appear in queue.
-                    return Err(Error::InconsistentOrder);
-                }
             }
         }
-
-        // Step 4. Add any remaining inputs not consumed by any gate/clone.
-        for input_id in circuit.get_input_ids() {
-            if !processed_inputs.contains(&input_id) {
-                final_order.push(input_id);
-            }
+        // Step 5. Check for cycles.
+        if order.len() != in_degree.len() {
+            let cycle_ops: Vec<Operation> = in_degree
+                .into_iter()
+                .filter(|(_, deg)| *deg > 0)
+                .map(|(op, _)| op)
+                .collect();
+            return Err(Error::CycleDetected(cycle_ops));
         }
 
-        // Step 5. Add any remaining outputs not sourced by any gate/clone.
-        for output_id in circuit.get_output_ids() {
-            if !processed_outputs.contains(&output_id) {
-                final_order.push(output_id);
-            }
-        }
-
-        // Step 6. Check for cycles.
-        if final_order.len() != circuit.node_count() {
-            return Err(Error::CycleDetected);
-        }
-
-        Ok(TopologicalOrder { order: final_order })
+        Ok(TopologicalOrder { order })
     }
 }

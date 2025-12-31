@@ -1,12 +1,9 @@
-//! Module for analyzing circuits and extracting useful information.
+//! Analysis framework
 //!
-//! This module provides various analyses that can be performed
-//! on computation circuits represented as graphs.
-//! Each analysis is implemented as a struct that implements
-//! the [`Analysis`] trait. The analyses can be run using the
-//! `Analyzer` struct, which caches results for efficiency.
+//! This module provides a framework for running analyses on circuits.
+//! Analyses are computed on-demand and cached for efficiency.
 
-mod analyses;
+pub(super) mod analyses;
 
 use crate::{
     circuit::Circuit,
@@ -20,23 +17,24 @@ use std::{
 };
 
 /// Trait for analyses that can be performed on circuits.
-trait Analysis: 'static {
+pub(super) trait Analysis: 'static {
     /// The output type of the analysis.
     type Output;
-    /// Run the analysis on the given circuit using the provided analyzer for recursive dependant analyses.
+
+    /// Run the analysis on the given circuit.
     fn run<T: Gate>(circuit: &Circuit<T>, analyzer: &mut Analyzer<T>) -> Result<Self::Output>;
 }
 
-/// Struct that manages and caches analyses on circuits.
+/// Manages and caches analyses on circuits.
 pub(super) struct Analyzer<T: Gate> {
-    /// Cache mapping [`TypeId`] of analyses to their results.
+    /// Cache mapping TypeId of analyses to their results.
     cache: HashMap<TypeId, Rc<dyn Any>>,
-    /// Phantom data to associate with the gate type.
+    /// Phantom data for the gate type.
     _marker: std::marker::PhantomData<T>,
 }
 
 impl<T: Gate> Analyzer<T> {
-    /// Create a new [`Analyzer`].
+    /// Create a new analyzer.
     pub(super) fn new() -> Self {
         Self {
             cache: HashMap::new(),
@@ -45,40 +43,31 @@ impl<T: Gate> Analyzer<T> {
     }
 
     /// Get the result of an analysis, computing and caching it if necessary.
-    fn get<A>(&mut self, circuit: &Circuit<T>) -> Result<Rc<A::Output>>
+    pub(super) fn get<A>(&mut self, circuit: &Circuit<T>) -> Result<Rc<A::Output>>
     where
         A: Analysis,
     {
         let key = TypeId::of::<A>();
 
-        if self.cache.contains_key(&key) {
-            return self
-                .cache
-                .get(&key)
-                .ok_or(Error::AnalysisCacheInconsistentEntry(key))?
+        if let Some(cached) = self.cache.get(&key) {
+            return cached
                 .clone()
                 .downcast::<A::Output>()
                 .map_err(|_| Error::AnalysisCacheTypeMismatch(key));
         }
 
         let result = A::run(circuit, self)?;
-
-        self.cache.insert(key, Rc::new(result));
-
-        self.cache
-            .get(&key)
-            .ok_or(Error::AnalysisCacheInconsistentEntry(key))?
-            .clone()
-            .downcast::<A::Output>()
-            .map_err(|_| Error::AnalysisCacheTypeMismatch(key))
+        let rc = Rc::new(result);
+        self.cache.insert(key, rc.clone());
+        Ok(rc)
     }
 
     /// Invalidate all cached analyses.
-    fn invalidate_all(&mut self) {
+    pub(super) fn invalidate_all(&mut self) {
         self.cache.clear();
     }
 
-    /// Invalidate all cached analyses except for the ones with the given [`TypeId`]s.
+    /// Invalidate all cached analyses except for the ones with the given TypeIds.
     pub(super) fn invalidate_except(&mut self, preserved: &[TypeId]) {
         self.cache.retain(|key, _| preserved.contains(key));
     }

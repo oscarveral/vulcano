@@ -1,9 +1,7 @@
-//! Module for optimizing circuits.
+//! Optimizer framework
 //!
-//! This module provides functionality to optimize computation
-//! circuits represented as graphs. The optimizations can leverage
-//! analyses provided by the [`Analyzer`] module to make informed
-//! decisions about circuit transformations.
+//! This module provides functionality to optimize circuits.
+//! Optimizations can leverage analyses provided by the Analyzer.
 
 mod passes;
 
@@ -13,38 +11,36 @@ use crate::{analyzer::Analyzer, circuit::Circuit, error::Result, gate::Gate};
 
 /// A type alias for an optimizer pass function.
 ///
-/// Passes return a tuple containing the optimized circuit and a Vec of [`TypeId`] representing
-/// the analyses they preserve.
+/// Passes return a tuple containing the optimized circuit and a Vec of TypeIds
+/// representing the analyses they preserve.
 type OptimizerPass<T> = fn(Circuit<T>, &mut Analyzer<T>) -> Result<(Circuit<T>, Vec<TypeId>)>;
 
-/// Struct that manages and applies optimization passes to circuits.
-struct Optimizer<T: Gate> {
+/// Manages and applies optimization passes to circuits.
+pub(super) struct Optimizer<T: Gate> {
     analyzer: Analyzer<T>,
     passes: Vec<OptimizerPass<T>>,
 }
 
 impl<T: Gate> Optimizer<T> {
-    /// Creates a new optimizer instance.
-    fn new() -> Self {
+    /// Create a new optimizer.
+    pub(super) fn new() -> Self {
         Self {
             analyzer: Analyzer::new(),
             passes: Vec::new(),
         }
     }
 
-    /// Adds an optimization pass to the optimizer.
-    fn add_pass(&mut self, pass: OptimizerPass<T>) {
+    /// Add an optimization pass.
+    pub(super) fn add_pass(&mut self, pass: OptimizerPass<T>) {
         self.passes.push(pass);
     }
 
-    /// Runs all optimization passes on the given circuit.
-    fn optimize(&mut self, mut circuit: Circuit<T>) -> Result<Circuit<T>> {
+    /// Run all optimization passes on the circuit.
+    pub(super) fn optimize(&mut self, mut circuit: Circuit<T>) -> Result<Circuit<T>> {
         for pass in &self.passes {
             let (optimized_circuit, preserved_analyses) = pass(circuit, &mut self.analyzer)?;
             circuit = optimized_circuit;
-            // Invalidate analyses not in preserved_analyses.
-            self.analyzer
-                .invalidate_except(preserved_analyses.as_slice());
+            self.analyzer.invalidate_except(&preserved_analyses);
         }
         Ok(circuit)
     }

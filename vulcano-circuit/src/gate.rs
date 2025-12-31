@@ -1,62 +1,51 @@
-//! Gate trait and helpers
+//! Gate trait
 //!
-//! This module defines the minimal traits needed to define, create
-//! and compile computational circuits.
+//! This module defines the trait for user-defined gates.
 
-use std::num::NonZeroUsize;
-
-use crate::{error::Result, handles::AccessMode};
+use crate::{error::Result, handles::Ownership};
 
 /// Trait implemented by a gate used inside a circuit.
 ///
-/// A gate is a small descriptor for an operation node.
-/// Intended to be an enum of all possible gate types.
+/// A gate is a descriptor for a computational operation.
+/// Typically implemented as an enum of all possible gate types.
 pub(super) trait Gate: Eq + Copy {
     /// Number of inputs the gate consumes.
-    /// This can be though as the number of input ports.
-    ///
-    /// For a binary adder this would be `2`, for a unary negation `1`.
-    fn input_count(&self) -> NonZeroUsize;
+    fn input_count(&self) -> usize;
 
     /// Number of outputs the gate produces.
-    /// This can be though as the number of output ports.
-    ///
-    /// For a binary adder this would be `1`, for a unary negation `1`.
-    /// For thigs like hoisted rotations could be more.
-    fn output_count(&self) -> NonZeroUsize;
+    fn output_count(&self) -> usize;
 
-    /// The type of the operands this gate consumes.
-    /// Intended to be an enum of all possible operand types.
+    /// The type descriptor for operands (e.g., ciphertext, plaintext).
     type Operand: Eq + Copy;
 
-    /// Returns the operand type at the given index.
-    fn input(&self, idx: usize) -> Result<Self::Operand>;
+    /// Returns the operand type at the given input index.
+    fn input_type(&self, idx: usize) -> Result<Self::Operand>;
 
-    /// Returns an iterator over all input operands types.
-    fn inputs(&self) -> Result<impl Iterator<Item = Self::Operand>> {
-        (0..self.input_count().get())
-            .map(|idx| self.input(idx))
-            .collect::<Result<Vec<_>>>()
-            .map(|v| v.into_iter())
-    }
-
-    /// Returns the operand type at the given index.
-    fn output(&self, idx: usize) -> Result<Self::Operand>;
-
-    /// Returns an iterator over all output operands types.
-    fn outputs(&self) -> Result<impl Iterator<Item = Self::Operand>> {
-        (0..self.output_count().get())
-            .map(|idx| self.output(idx))
-            .collect::<Result<Vec<_>>>()
-            .map(|v| v.into_iter())
-    }
+    /// Returns the operand type at the given output index.
+    fn output_type(&self, idx: usize) -> Result<Self::Operand>;
 
     /// Returns the access mode for the input at the given index.
-    fn access_mode(&self, idx: usize) -> Result<AccessMode>;
+    fn access_mode(&self, idx: usize) -> Result<Ownership>;
+
+    /// Returns an iterator over all input types.
+    fn input_types(&self) -> Result<impl Iterator<Item = Self::Operand>> {
+        (0..self.input_count())
+            .map(|idx| self.input_type(idx))
+            .collect::<Result<Vec<_>>>()
+            .map(|v| v.into_iter())
+    }
+
+    /// Returns an iterator over all output types.
+    fn output_types(&self) -> Result<impl Iterator<Item = Self::Operand>> {
+        (0..self.output_count())
+            .map(|idx| self.output_type(idx))
+            .collect::<Result<Vec<_>>>()
+            .map(|v| v.into_iter())
+    }
 
     /// Returns an iterator over all access modes.
-    fn access_modes(&self) -> Result<impl Iterator<Item = AccessMode>> {
-        (0..self.input_count().get())
+    fn access_modes(&self) -> Result<impl Iterator<Item = Ownership>> {
+        (0..self.input_count())
             .map(|idx| self.access_mode(idx))
             .collect::<Result<Vec<_>>>()
             .map(|v| v.into_iter())
