@@ -250,3 +250,88 @@ fn insert_remove_many() {
         assert!(arena.contains(keys[i]));
     }
 }
+
+#[test]
+fn reserve_and_fill() {
+    let mut arena = Arena::new();
+    let key = arena.reserve();
+
+    // Reserved slot should be inaccessible via get/get_mut.
+    assert_eq!(arena.get(key), None);
+    assert!(arena.get_mut(key).is_none());
+    assert!(!arena.contains(key));
+
+    // Fill the slot.
+    assert_eq!(arena.fill(key, 42), Ok(()));
+
+    // Slot should now be accessible.
+    assert_eq!(arena.get(key), Some(&42));
+    assert!(arena.contains(key));
+}
+
+#[test]
+fn fill_invalid_key_fails() {
+    let mut arena = Arena::new();
+    let r_key = arena.reserve();
+    let i_key = arena.insert(10);
+
+    // Fill with wrong generation (non-existent).
+    let bad_key = crate::key::Key {
+        index: r_key.index() as u32,
+        generation: r_key.generation() + 1,
+    };
+    assert_eq!(arena.fill(bad_key, 99), Err(99));
+
+    // Fill already occupied slot.
+    assert_eq!(arena.fill(i_key, 88), Err(88));
+
+    // Correct fill works.
+    assert_eq!(arena.fill(r_key, 100), Ok(()));
+}
+
+#[test]
+fn remove_reserved_slot() {
+    let mut arena: Arena<i32> = Arena::new();
+    let key = arena.reserve();
+
+    // Removing a reserved slot should return None but free the slot.
+    assert_eq!(arena.remove(key), None);
+
+    // Slot is now free, should be reused.
+    let key2 = arena.insert(123);
+    assert_eq!(key.index(), key2.index());
+    assert_ne!(key.generation(), key2.generation());
+}
+
+#[test]
+fn iter_skips_reserved() {
+    let mut arena = Arena::new();
+    let k1 = arena.insert(1);
+    let _k2 = arena.reserve(); // reserved
+    let k3 = arena.insert(3);
+
+    let keys: Vec<_> = arena.iter().map(|(k, _)| k).collect();
+    assert_eq!(keys.len(), 2);
+    assert!(keys.contains(&k1));
+    assert!(keys.contains(&k3));
+
+    let mut count = 0;
+    for _ in arena.iter_mut() {
+        count += 1;
+    }
+    assert_eq!(count, 2);
+}
+
+#[test]
+fn double_reservation_reuse() {
+    let mut arena: Arena<i32> = Arena::new();
+    let k1 = arena.reserve();
+    let k2 = arena.reserve();
+
+    assert_ne!(k1, k2);
+
+    // Remove one, verify reuse
+    arena.remove(k1);
+    let k3 = arena.reserve();
+    assert_eq!(k1.index(), k3.index());
+}

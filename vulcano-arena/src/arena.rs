@@ -6,6 +6,8 @@ use crate::key::Key;
 enum Slot<T> {
     /// Slot contains a value.
     Occupied { value: T, generation: u32 },
+    /// Slot is reserved for a future value.
+    Reserved { generation: u32 },
     /// Slot is free and points to next free slot.
     Free {
         next_free: Option<u32>,
@@ -61,7 +63,9 @@ impl<T> Arena<T> {
                     self.free_head = *next_free;
                     *generation
                 }
-                Slot::Occupied { .. } => unreachable!("free_head pointed to occupied slot"),
+                Slot::Occupied { .. } | Slot::Reserved { .. } => {
+                    unreachable!("free_head pointed to occupied or reserved slot")
+                }
             };
             *slot = Slot::Occupied { value, generation };
             Key { index, generation }
@@ -79,12 +83,72 @@ impl<T> Arena<T> {
         }
     }
 
+    /// Reserve a slot in the arena, returning its key.
+    ///
+    /// The slot is marked as reserved and contains no value. Accessing it via `get`
+    /// or `get_mut` will return `None`. Use `fill` to populate the slot.
+    pub fn reserve(&mut self) -> Key {
+        self.len += 1;
+
+        if let Some(index) = self.free_head {
+            // Reuse a free slot.
+            let slot = &mut self.slots[index as usize];
+            let generation = match slot {
+                Slot::Free {
+                    next_free,
+                    generation,
+                } => {
+                    self.free_head = *next_free;
+                    *generation
+                }
+                Slot::Occupied { .. } | Slot::Reserved { .. } => {
+                    unreachable!("free_head pointed to occupied or reserved slot")
+                }
+            };
+            *slot = Slot::Reserved { generation };
+            Key { index, generation }
+        } else {
+            // Grow the arena.
+            let index = self.slots.len() as u32;
+            self.slots.push(Slot::Reserved { generation: 0 });
+            Key {
+                index,
+                generation: 0,
+            }
+        }
+    }
+
+    /// Fill a reserved slot with a value.
+    ///
+    /// Returns `Ok(())` if the slot was successfully filled.
+    /// Returns `Err(value)` if the key is invalid or the slot was not reserved.
+    pub fn fill(&mut self, key: Key, value: T) -> Result<(), T> {
+        let slot = match self.slots.get_mut(key.index as usize) {
+            Some(slot) => slot,
+            None => return Err(value),
+        };
+
+        match slot {
+            Slot::Reserved { generation } if *generation == key.generation => {
+                *slot = Slot::Occupied {
+                    value,
+                    generation: key.generation,
+                };
+                Ok(())
+            }
+            // Key mismatch or not reserved.
+            _ => Err(value),
+        }
+    }
+
     /// Remove the value associated with the key, returning it if valid.
     pub fn remove(&mut self, key: Key) -> Option<T> {
         let slot = self.slots.get_mut(key.index as usize)?;
 
         match slot {
-            Slot::Occupied { generation, .. } if *generation == key.generation => {
+            Slot::Occupied { generation, .. } | Slot::Reserved { generation }
+                if *generation == key.generation =>
+            {
                 let new_generation = generation.wrapping_add(1);
                 let old = std::mem::replace(
                     slot,
@@ -98,6 +162,7 @@ impl<T> Arena<T> {
 
                 match old {
                     Slot::Occupied { value, .. } => Some(value),
+                    Slot::Reserved { .. } => None,
                     Slot::Free { .. } => unreachable!(),
                 }
             }
@@ -123,7 +188,10 @@ impl<T> Arena<T> {
 
     /// Check if a key is valid (points to an occupied slot with matching generation).
     pub fn contains(&self, key: Key) -> bool {
-        self.get(key).is_some()
+        match self.slots.get(key.index as usize) {
+            Some(Slot::Occupied { generation, .. }) if *generation == key.generation => true,
+            _ => false,
+        }
     }
 
     /// Returns the number of occupied slots.
@@ -161,7 +229,7 @@ impl<T> Arena<T> {
                     },
                     value,
                 )),
-                Slot::Free { .. } => None,
+                Slot::Free { .. } | Slot::Reserved { .. } => None,
             })
     }
 
@@ -178,7 +246,7 @@ impl<T> Arena<T> {
                     },
                     value,
                 )),
-                Slot::Free { .. } => None,
+                Slot::Free { .. } | Slot::Reserved { .. } => None,
             })
     }
 }
