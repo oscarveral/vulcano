@@ -9,6 +9,9 @@ version = "0.1.0"
 [[package]]
 name = "vulcano-circuit"
 version = "0.1.0"
+dependencies = [
+ "vulcano-arena",
+]
 
 [[package]]
 name = "vulcano-core"
