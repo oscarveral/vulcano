@@ -1,39 +1,53 @@
-//! Gate trait and helpers
+//! Gate trait
 //!
-//! This module defines the minimal [`Gate`] trait used by the circuit
-//! representation. A gate is a small pure value that describes an
-//! operation (for example: an adder, a boolean AND, a constant loader,
-//! etc.). The circuit uses implementations of [`Gate`] when building and
-//! executing the computation graph.
-//!
-//! Conventions:
-//! - Implementations should make [`Gate::arity`] and [`Gate::name`] cheap
-//!   to call.
-//! - A gate is expected to produce exactly one output value. That single
-//!   output may be consumed multiple times by downstream gates (fan-out is
-//!   supported at the circuit level).
+//! This module defines the trait for user-defined gates.
+
+use crate::{error::Result, handles::Ownership};
 
 /// Trait implemented by a gate used inside a circuit.
 ///
-/// A [`Gate`] is a small descriptor for an operation node. The circuit
-/// machinery can query the gate for its [`Gate::arity`] and its [`Gate::name`].
-/// Gates are expected to produce a single output value; the circuit model handles
-/// fan-out (multiple consumers of that output).
-///
-/// Keeping this trait minimal keeps gate implementations simple and
-/// allows the circuit code to remain generic over the concrete gate
-/// type.
-pub trait Gate {
+/// A gate is a descriptor for a computational operation.
+/// Typically implemented as an enum of all possible gate types.
+pub(super) trait Gate: Eq + Copy {
     /// Number of inputs the gate consumes.
-    ///
-    /// For a binary adder this would be `2`, for a unary negation `1`,
-    /// and for a constant-producing gate `0`.
-    fn arity(&self) -> usize;
+    fn input_count(&self) -> usize;
 
-    /// A human-readable name for the gate.
-    ///
-    /// This is used in debugging, logging and textual dumps of the
-    /// circuit. Implementations should return a short, descriptive
-    /// string slice (often a static string).
-    fn name(&self) -> &str;
+    /// Number of outputs the gate produces.
+    fn output_count(&self) -> usize;
+
+    /// The type descriptor for operands (e.g., ciphertext, plaintext).
+    type Operand: Eq + Copy;
+
+    /// Returns the operand type at the given input index.
+    fn input_type(&self, idx: usize) -> Result<Self::Operand>;
+
+    /// Returns the operand type at the given output index.
+    fn output_type(&self, idx: usize) -> Result<Self::Operand>;
+
+    /// Returns the access mode for the input at the given index.
+    fn access_mode(&self, idx: usize) -> Result<Ownership>;
+
+    /// Returns an iterator over all input types.
+    fn input_types(&self) -> Result<impl Iterator<Item = Self::Operand>> {
+        (0..self.input_count())
+            .map(|idx| self.input_type(idx))
+            .collect::<Result<Vec<_>>>()
+            .map(|v| v.into_iter())
+    }
+
+    /// Returns an iterator over all output types.
+    fn output_types(&self) -> Result<impl Iterator<Item = Self::Operand>> {
+        (0..self.output_count())
+            .map(|idx| self.output_type(idx))
+            .collect::<Result<Vec<_>>>()
+            .map(|v| v.into_iter())
+    }
+
+    /// Returns an iterator over all access modes.
+    fn access_modes(&self) -> Result<impl Iterator<Item = Ownership>> {
+        (0..self.input_count())
+            .map(|idx| self.access_mode(idx))
+            .collect::<Result<Vec<_>>>()
+            .map(|v| v.into_iter())
+    }
 }
