@@ -188,10 +188,7 @@ impl<T> Arena<T> {
 
     /// Check if a key is valid (points to an occupied slot with matching generation).
     pub fn contains(&self, key: Key) -> bool {
-        match self.slots.get(key.index as usize) {
-            Some(Slot::Occupied { generation, .. }) if *generation == key.generation => true,
-            _ => false,
-        }
+        matches!(self.slots.get(key.index as usize), Some(Slot::Occupied { generation, .. }) if *generation == key.generation)
     }
 
     /// Returns the number of occupied slots.
