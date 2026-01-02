@@ -10,6 +10,8 @@ use crate::{
     handles::{CloneId, DropId, GateId, InputId, OutputId, Ownership, PortId, ValueId},
 };
 
+use vulcano_arena::Arena;
+
 /// A gate operation: user-defined computation.
 pub(super) struct GateOperation<G: Gate> {
     /// The gate descriptor.
@@ -264,61 +266,66 @@ impl From<Producer> for Operation {
 /// A circuit in Linear SSA form.
 pub(super) struct Circuit<G: Gate> {
     /// All gates, indexed by GateId.
-    gates: Vec<GateOperation<G>>,
+    gates: Arena<GateOperation<G>>,
     /// All clones, indexed by CloneId.
-    clones: Vec<CloneOperation>,
+    clones: Arena<CloneOperation>,
     /// All drops, indexed by DropId.
-    drops: Vec<DropOperation>,
+    drops: Arena<DropOperation>,
     /// Circuit inputs, indexed by InputId.
-    inputs: Vec<InputOperation>,
+    inputs: Arena<InputOperation>,
     /// Circuit outputs, indexed by OutputId.
-    outputs: Vec<OutputOperation>,
+    outputs: Arena<OutputOperation>,
     /// All values, indexed by ValueId.
-    values: Vec<Value<G>>,
+    values: Arena<Value<G>>,
 }
 
 impl<G: Gate> Circuit<G> {
     /// Create a new empty circuit.
     pub(super) fn new() -> Self {
         Self {
-            gates: Vec::new(),
-            clones: Vec::new(),
-            drops: Vec::new(),
-            values: Vec::new(),
-            inputs: Vec::new(),
-            outputs: Vec::new(),
+            gates: Arena::new(),
+            clones: Arena::new(),
+            drops: Arena::new(),
+            values: Arena::new(),
+            inputs: Arena::new(),
+            outputs: Arena::new(),
         }
     }
 
     /// Create a new value from a producer and port.
     fn create_value(&mut self, producer: Producer, port: PortId, ty: G::Operand) -> ValueId {
-        let id = ValueId::new(self.values.len());
-        self.values.push(Value {
+        let id_key = self.values.insert(Value {
             producer,
             port,
             uses: Vec::new(),
             value_type: ty,
         });
-        id
+        ValueId::new(id_key)
     }
 
     /// Record the use of a value.
     fn record_use(&mut self, value: ValueId, consumer: Consumer, port: PortId, mode: Ownership) {
-        self.values[value.index()].uses.push(Usage {
-            consumer,
-            port,
-            mode,
-        });
+        if let Some(val) = self.values.get_mut(value.key()) {
+            val.uses.push(Usage {
+                consumer,
+                port,
+                mode,
+            });
+        }
     }
 
     /// Get all move usages of a value.
     pub(super) fn get_move_uses(&self, value: ValueId) -> Vec<Usage> {
-        self.values[value.index()]
-            .uses
-            .iter()
-            .filter(|u| u.mode == Ownership::Move)
-            .copied()
-            .collect()
+        self.values
+            .get(value.key())
+            .map(|v| {
+                v.uses
+                    .iter()
+                    .filter(|u| u.mode == Ownership::Move)
+                    .copied()
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// Rewire a use from one value to another.
@@ -331,35 +338,51 @@ impl<G: Gate> Circuit<G> {
         port: PortId,
     ) {
         // Remove usage from old value.
-        let old_uses = &mut self.values[old_value.index()].uses;
-        if let Some(pos) = old_uses
-            .iter()
-            .position(|u| u.consumer == consumer && u.port == port)
+        let mut usage = None;
+        if let Some(old_val) = self.values.get_mut(old_value.key())
+            && let Some(pos) = old_val
+                .uses
+                .iter()
+                .position(|u| u.consumer == consumer && u.port == port)
         {
-            let usage = old_uses.remove(pos);
-            // Add usage to new value.
-            self.values[new_value.index()].uses.push(usage);
+            usage = Some(old_val.uses.remove(pos));
+        }
+
+        // Add usage to new value.
+        if let Some(u) = usage
+            && let Some(new_val) = self.values.get_mut(new_value.key())
+        {
+            new_val.uses.push(u);
         }
     }
 
     /// Create a circuit input.
     pub(super) fn add_input(&mut self, value_type: G::Operand) -> (InputId, ValueId) {
-        let input_id = InputId::new(self.inputs.len());
+        // Reserve input slot to get key
+        let input_key = self.inputs.reserve();
+        let input_id = InputId::new(input_key);
+
         let value_id = self.create_value(Producer::Input(input_id), PortId::new(0), value_type);
-        self.inputs.push(InputOperation { output: value_id });
+
+        // Fill input slot
+        let _ = self
+            .inputs
+            .fill(input_key, InputOperation { output: value_id });
+
         (input_id, value_id)
     }
 
     /// Mark a value as a circuit output.
     pub(super) fn add_output(&mut self, value: ValueId) -> OutputId {
-        let output_id = OutputId::new(self.outputs.len());
+        let output_key = self.outputs.insert(OutputOperation { input: value });
+        let output_id = OutputId::new(output_key);
+
         self.record_use(
             value,
             Consumer::Output(output_id),
             PortId::new(0),
             Ownership::Move,
         );
-        self.outputs.push(OutputOperation { input: value });
         output_id
     }
 
@@ -386,17 +409,39 @@ impl<G: Gate> Circuit<G> {
 
         // Pre-compute access modes and validate input types.
         let mut access_modes = Vec::with_capacity(inputs.len());
-        let gate_id = GateId::new(self.gates.len());
+
+        let gate_key = self.gates.reserve();
+        let gate_id = GateId::new(gate_key);
+
         for (idx, &v) in inputs.iter().enumerate() {
-            let expected_ty = gate.input_type(idx)?;
-            let actual_ty = self.values[v.index()].value_type;
+            let expected_ty = match gate.input_type(idx) {
+                Ok(ty) => ty,
+                Err(e) => {
+                    self.gates.remove(gate_key);
+                    return Err(e);
+                }
+            };
+            let actual_ty = match self.values.get(v.key()) {
+                Some(val) => val.value_type,
+                None => {
+                    self.gates.remove(gate_key);
+                    return Err(Error::ValueNotFound(v));
+                }
+            };
             if expected_ty != actual_ty {
+                self.gates.remove(gate_key);
                 return Err(Error::TypeMismatch {
                     gate: gate_id,
                     port: idx,
                 });
             }
-            access_modes.push(gate.access_mode(idx)?);
+            match gate.access_mode(idx) {
+                Ok(mode) => access_modes.push(mode),
+                Err(e) => {
+                    self.gates.remove(gate_key);
+                    return Err(e);
+                }
+            }
         }
 
         // Create output values.
@@ -412,21 +457,25 @@ impl<G: Gate> Circuit<G> {
             self.record_use(v, Consumer::Gate(gate_id), port, mode);
         }
 
-        self.gates.push(GateOperation {
-            gate,
-            inputs,
-            outputs: outputs.clone(),
-        });
+        let _ = self.gates.fill(
+            gate_key,
+            GateOperation {
+                gate,
+                inputs,
+                outputs: outputs.clone(),
+            },
+        );
 
         Ok((gate_id, outputs))
     }
 
     /// Clone a value into N copies.
     pub(super) fn add_clone(&mut self, input: ValueId, count: usize) -> (CloneId, Vec<ValueId>) {
-        let clone_id = CloneId::new(self.clones.len());
+        let clone_key = self.clones.reserve();
+        let clone_id = CloneId::new(clone_key);
 
         // Clone preserves the input's type.
-        let ty = self.values[input.index()].value_type;
+        let ty = self.values.get(input.key()).map(|v| v.value_type).unwrap(); // FIXME: handle error?
 
         // Create outputs.
         let outputs: Vec<_> = (0..count)
@@ -441,17 +490,21 @@ impl<G: Gate> Circuit<G> {
             Ownership::Borrow,
         );
 
-        self.clones.push(CloneOperation {
-            input,
-            outputs: outputs.clone(),
-        });
+        let _ = self.clones.fill(
+            clone_key,
+            CloneOperation {
+                input,
+                outputs: outputs.clone(),
+            },
+        );
 
         (clone_id, outputs)
     }
 
     /// Drop a value.
     pub(super) fn add_drop(&mut self, input: ValueId) -> DropId {
-        let drop_id = DropId::new(self.drops.len());
+        let drop_key = self.drops.insert(DropOperation { input });
+        let drop_id = DropId::new(drop_key);
 
         // Drop moves the input.
         self.record_use(
@@ -461,41 +514,67 @@ impl<G: Gate> Circuit<G> {
             Ownership::Move,
         );
 
-        self.drops.push(DropOperation { input });
-
         drop_id
     }
 
     /// Get a gate by id.
     pub(super) fn gate_op(&self, id: GateId) -> Result<&GateOperation<G>> {
-        self.gates.get(id.index()).ok_or(Error::GateNotFound(id))
+        self.gates.get(id.key()).ok_or(Error::GateNotFound(id))
     }
 
     /// Get a clone by id.
     pub(super) fn clone_op(&self, id: CloneId) -> Result<&CloneOperation> {
-        self.clones.get(id.index()).ok_or(Error::CloneNotFound(id))
+        self.clones.get(id.key()).ok_or(Error::CloneNotFound(id))
     }
 
     /// Get a drop by id.
     pub(super) fn drop_op(&self, id: DropId) -> Result<&DropOperation> {
-        self.drops.get(id.index()).ok_or(Error::DropNotFound(id))
+        self.drops.get(id.key()).ok_or(Error::DropNotFound(id))
     }
 
     /// Get a input by id.
     pub(super) fn input_op(&self, id: InputId) -> Result<&InputOperation> {
-        self.inputs.get(id.index()).ok_or(Error::InputNotFound(id))
+        self.inputs.get(id.key()).ok_or(Error::InputNotFound(id))
     }
 
     /// Get a output by id.
     pub(super) fn output_op(&self, id: OutputId) -> Result<&OutputOperation> {
-        self.outputs
-            .get(id.index())
-            .ok_or(Error::OutputNotFound(id))
+        self.outputs.get(id.key()).ok_or(Error::OutputNotFound(id))
     }
 
     /// Get a value by id.
     pub(super) fn value(&self, id: ValueId) -> Result<&Value<G>> {
-        self.values.get(id.index()).ok_or(Error::ValueNotFound(id))
+        self.values.get(id.key()).ok_or(Error::ValueNotFound(id))
+    }
+
+    /// Remove a gate by id (does not update cross-references).
+    pub(super) fn remove_gate_unchecked(&mut self, id: GateId) {
+        self.gates.remove(id.key());
+    }
+
+    /// Remove a clone by id (does not update cross-references).
+    pub(super) fn remove_clone_unchecked(&mut self, id: CloneId) {
+        self.clones.remove(id.key());
+    }
+
+    /// Remove a drop by id (does not update cross-references).
+    pub(super) fn remove_drop_unchecked(&mut self, id: DropId) {
+        self.drops.remove(id.key());
+    }
+
+    /// Remove an input by id (does not update cross-references).
+    pub(super) fn remove_input_unchecked(&mut self, id: InputId) {
+        self.inputs.remove(id.key());
+    }
+
+    /// Remove an output by id (does not update cross-references).
+    pub(super) fn remove_output_unchecked(&mut self, id: OutputId) {
+        self.outputs.remove(id.key());
+    }
+
+    /// Remove a value by id (does not update cross-references).
+    pub(super) fn remove_value_unchecked(&mut self, id: ValueId) {
+        self.values.remove(id.key());
     }
 
     /// Number of gates.
@@ -530,50 +609,32 @@ impl<G: Gate> Circuit<G> {
 
     /// Iterate over all gates.
     pub(super) fn all_gates(&self) -> impl Iterator<Item = (GateId, &GateOperation<G>)> {
-        self.gates
-            .iter()
-            .enumerate()
-            .map(|(i, g)| (GateId::new(i), g))
+        self.gates.iter().map(|(k, g)| (GateId::new(k), g))
     }
 
     /// Iterate over all clones.
     pub(super) fn all_clones(&self) -> impl Iterator<Item = (CloneId, &CloneOperation)> {
-        self.clones
-            .iter()
-            .enumerate()
-            .map(|(i, c)| (CloneId::new(i), c))
+        self.clones.iter().map(|(k, c)| (CloneId::new(k), c))
     }
 
     /// Iterate over all drops.
     pub(super) fn all_drops(&self) -> impl Iterator<Item = (DropId, &DropOperation)> {
-        self.drops
-            .iter()
-            .enumerate()
-            .map(|(i, d)| (DropId::new(i), d))
+        self.drops.iter().map(|(k, d)| (DropId::new(k), d))
     }
 
     /// Iterate over all circuit inputs.
     pub(super) fn all_inputs(&self) -> impl Iterator<Item = (InputId, &InputOperation)> {
-        self.inputs
-            .iter()
-            .enumerate()
-            .map(|(i, op)| (InputId::new(i), op))
+        self.inputs.iter().map(|(k, op)| (InputId::new(k), op))
     }
 
     /// Iterate over all circuit outputs.
     pub(super) fn all_outputs(&self) -> impl Iterator<Item = (OutputId, &OutputOperation)> {
-        self.outputs
-            .iter()
-            .enumerate()
-            .map(|(i, op)| (OutputId::new(i), op))
+        self.outputs.iter().map(|(k, op)| (OutputId::new(k), op))
     }
 
     /// Iterate over all values.
     pub(super) fn all_values(&self) -> impl Iterator<Item = (ValueId, &Value<G>)> {
-        self.values
-            .iter()
-            .enumerate()
-            .map(|(i, v)| (ValueId::new(i), v))
+        self.values.iter().map(|(k, v)| (ValueId::new(k), v))
     }
 
     /// Iterate over all operations in the circuit.
@@ -591,13 +652,13 @@ impl<G: Gate> Circuit<G> {
         let (input_val, gate_vals, clone_vals): (Option<ValueId>, &[ValueId], &[ValueId]) = match op
         {
             Operation::Input(id) => {
-                let val = self.inputs.get(id.index()).map(|i| i.output);
+                let val = self.inputs.get(id.key()).map(|i| i.output);
                 (val, &[], &[])
             }
             Operation::Gate(id) => {
                 let vals = self
                     .gates
-                    .get(id.index())
+                    .get(id.key())
                     .map(|g| g.outputs.as_slice())
                     .unwrap_or(&[]);
                 (None, vals, &[])
@@ -605,7 +666,7 @@ impl<G: Gate> Circuit<G> {
             Operation::Clone(id) => {
                 let vals = self
                     .clones
-                    .get(id.index())
+                    .get(id.key())
                     .map(|c| c.outputs.as_slice())
                     .unwrap_or(&[]);
                 (None, &[], vals)
@@ -622,29 +683,5 @@ impl<G: Gate> Circuit<G> {
 impl<G: Gate> Default for Circuit<G> {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Type alias for the tuple of all circuit components.
-pub(super) type CircuitParts<G> = (
-    Vec<GateOperation<G>>,
-    Vec<CloneOperation>,
-    Vec<DropOperation>,
-    Vec<InputOperation>,
-    Vec<OutputOperation>,
-    Vec<Value<G>>,
-);
-
-impl<G: Gate> Circuit<G> {
-    /// Consume the circuit and return ownership of all components.
-    pub(super) fn into_parts(self) -> CircuitParts<G> {
-        (
-            self.gates,
-            self.clones,
-            self.drops,
-            self.inputs,
-            self.outputs,
-            self.values,
-        )
     }
 }
