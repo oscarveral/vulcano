@@ -45,6 +45,9 @@ pub enum Error {
     AnalysisCacheInconsistentEntry(TypeId),
     /// Analysis cache type mismatch.
     AnalysisCacheTypeMismatch(TypeId),
+
+    /// Operation not found in schedule.
+    OperationNotScheduled(Operation),
 }
 
 impl std::fmt::Display for Error {
@@ -86,6 +89,9 @@ impl std::fmt::Display for Error {
             }
             Error::AnalysisCacheTypeMismatch(id) => {
                 write!(f, "analysis cache type mismatch: {:?}", id)
+            }
+            Error::OperationNotScheduled(op) => {
+                write!(f, "operation not found in schedule: {:?}", op)
             }
         }
     }
