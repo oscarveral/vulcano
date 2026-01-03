@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Reconcile ownership issues by inserting drops and clones.
-pub(crate) fn reconcile_ownership<G: Gate>(
+pub fn reconcile_ownership<G: Gate>(
     mut circuit: Circuit<G>,
     analyzer: &mut Analyzer<G>,
 ) -> Result<(Circuit<G>, Vec<TypeId>)> {
@@ -39,7 +39,12 @@ pub(crate) fn reconcile_ownership<G: Gate>(
 
         // Rewire all but the first move to use clone outputs instead.
         for (usage, clone_output) in move_uses.iter().skip(1).zip(clone_outputs.iter()) {
-            circuit.rewire_use(value_id, *clone_output, usage.consumer, usage.port);
+            circuit.rewire_use(
+                value_id,
+                *clone_output,
+                usage.get_consumer(),
+                usage.get_port(),
+            );
         }
     }
 

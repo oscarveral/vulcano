@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Eliminate dead code by removing unreachable elements from the circuit.
-pub(crate) fn dead_code_elimination<G: Gate>(
+pub fn dead_code_elimination<G: Gate>(
     mut circuit: Circuit<G>,
     analyzer: &mut Analyzer<G>,
 ) -> Result<(Circuit<G>, Vec<TypeId>)> {

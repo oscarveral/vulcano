@@ -3,7 +3,7 @@
 //! This module provides functionality to optimize circuits.
 //! Optimizations can leverage analyses provided by the Analyzer.
 
-mod passes;
+pub mod passes;
 
 use std::any::TypeId;
 
@@ -13,17 +13,17 @@ use crate::{analyzer::Analyzer, circuit::Circuit, error::Result, gate::Gate};
 ///
 /// Passes return a tuple containing the optimized circuit and a Vec of TypeIds
 /// representing the analyses they preserve.
-type OptimizerPass<T> = fn(Circuit<T>, &mut Analyzer<T>) -> Result<(Circuit<T>, Vec<TypeId>)>;
+pub type OptimizerPass<T> = fn(Circuit<T>, &mut Analyzer<T>) -> Result<(Circuit<T>, Vec<TypeId>)>;
 
 /// Manages and applies optimization passes to circuits.
-pub(super) struct Optimizer<T: Gate> {
+pub struct Optimizer<T: Gate> {
     analyzer: Analyzer<T>,
     passes: Vec<OptimizerPass<T>>,
 }
 
 impl<T: Gate> Optimizer<T> {
     /// Create a new optimizer.
-    pub(super) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             analyzer: Analyzer::new(),
             passes: Vec::new(),
@@ -31,12 +31,12 @@ impl<T: Gate> Optimizer<T> {
     }
 
     /// Add an optimization pass.
-    pub(super) fn add_pass(&mut self, pass: OptimizerPass<T>) {
+    pub fn add_pass(&mut self, pass: OptimizerPass<T>) {
         self.passes.push(pass);
     }
 
     /// Run all optimization passes on the circuit.
-    pub(super) fn optimize(&mut self, mut circuit: Circuit<T>) -> Result<Circuit<T>> {
+    pub fn optimize(&mut self, mut circuit: Circuit<T>) -> Result<Circuit<T>> {
         for pass in &self.passes {
             let (optimized_circuit, preserved_analyses) = pass(circuit, &mut self.analyzer)?;
             circuit = optimized_circuit;

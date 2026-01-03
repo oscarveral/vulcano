@@ -14,19 +14,19 @@ use crate::{
 };
 
 /// Result of topological order analysis.
-struct TopologicalOrder {
+pub struct TopologicalOrder {
     /// Operations in valid execution order.
     order: Vec<Operation>,
 }
 
 impl TopologicalOrder {
     /// Get the operations in topological order.
-    fn operations(&self) -> &[Operation] {
+    pub fn operations(&self) -> &[Operation] {
         &self.order
     }
 
     /// Iterate over operations in topological order.
-    fn iter(&self) -> impl Iterator<Item = &Operation> {
+    pub fn iter(&self) -> impl Iterator<Item = &Operation> {
         self.order.iter()
     }
 }
@@ -46,7 +46,7 @@ impl Analysis for TopologicalOrder {
         // Step 3. Build edges: for each value, increment in-degree for each consumer.
         for (_, value) in circuit.all_values() {
             for usage in value.get_uses() {
-                let consumer_op: Operation = usage.consumer.into();
+                let consumer_op: Operation = usage.get_consumer().into();
                 // Each consumer depends on the producer.
                 *in_degree.entry(consumer_op).or_insert(0) += 1;
             }
@@ -71,7 +71,7 @@ impl Analysis for TopologicalOrder {
             for value_id in circuit.produced_values(op) {
                 let value = circuit.value(value_id)?;
                 for usage in value.get_uses() {
-                    let consumer_op: Operation = usage.consumer.into();
+                    let consumer_op: Operation = usage.get_consumer().into();
                     if let Some(deg) = in_degree.get_mut(&consumer_op) {
                         *deg -= 1;
                         if *deg == 0 {

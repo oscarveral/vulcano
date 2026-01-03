@@ -106,23 +106,23 @@ impl OutputId {
 
 /// Handle identifying a port (input or output slot).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub(super) struct PortId(usize);
+pub struct PortId(usize);
 
 impl PortId {
     /// Create a new port id from a numeric index.
-    pub(super) fn new(id: usize) -> Self {
+    pub fn new(id: usize) -> Self {
         Self(id)
     }
 
     /// Return the numeric index.
-    pub(super) fn index(self) -> usize {
+    pub fn index(self) -> usize {
         self.0
     }
 }
 
 /// Ownership mode for a use of a value.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum Ownership {
+pub enum Ownership {
     /// Value is borrowed. Remains available after use.
     Borrow,
     /// Value is moved. Consumed, no longer available.

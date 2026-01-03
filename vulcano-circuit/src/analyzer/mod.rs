@@ -3,7 +3,7 @@
 //! This module provides a framework for running analyses on circuits.
 //! Analyses are computed on-demand and cached for efficiency.
 
-pub(super) mod analyses;
+pub mod analyses;
 
 use crate::{
     circuit::Circuit,
@@ -17,7 +17,7 @@ use std::{
 };
 
 /// Trait for analyses that can be performed on circuits.
-pub(super) trait Analysis: 'static {
+pub trait Analysis: 'static {
     /// The output type of the analysis.
     type Output;
 
@@ -26,7 +26,7 @@ pub(super) trait Analysis: 'static {
 }
 
 /// Manages and caches analyses on circuits.
-pub(super) struct Analyzer<T: Gate> {
+pub struct Analyzer<T: Gate> {
     /// Cache mapping TypeId of analyses to their results.
     cache: HashMap<TypeId, Rc<dyn Any>>,
     /// Phantom data for the gate type.
@@ -35,7 +35,7 @@ pub(super) struct Analyzer<T: Gate> {
 
 impl<T: Gate> Analyzer<T> {
     /// Create a new analyzer.
-    pub(super) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             cache: HashMap::new(),
             _marker: std::marker::PhantomData,
@@ -43,7 +43,7 @@ impl<T: Gate> Analyzer<T> {
     }
 
     /// Get the result of an analysis, computing and caching it if necessary.
-    pub(super) fn get<A>(&mut self, circuit: &Circuit<T>) -> Result<Rc<A::Output>>
+    pub fn get<A>(&mut self, circuit: &Circuit<T>) -> Result<Rc<A::Output>>
     where
         A: Analysis,
     {
@@ -63,12 +63,12 @@ impl<T: Gate> Analyzer<T> {
     }
 
     /// Invalidate all cached analyses.
-    pub(super) fn invalidate_all(&mut self) {
+    pub fn invalidate_all(&mut self) {
         self.cache.clear();
     }
 
     /// Invalidate all cached analyses except for the ones with the given TypeIds.
-    pub(super) fn invalidate_except(&mut self, preserved: &[TypeId]) {
+    pub fn invalidate_except(&mut self, preserved: &[TypeId]) {
         self.cache.retain(|key, _| preserved.contains(key));
     }
 }

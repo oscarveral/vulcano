@@ -14,7 +14,7 @@ use crate::{
 
 /// Ownership issue.
 #[derive(Clone, Debug)]
-pub(crate) enum OwnershipIssue {
+pub enum OwnershipIssue {
     /// Value is moved multiple times.
     Overconsumed { value: ValueId, move_count: usize },
     /// Value is never moved.
@@ -22,24 +22,24 @@ pub(crate) enum OwnershipIssue {
 }
 
 /// Result of ownership analysis.
-pub(crate) struct OwnershipIssues {
+pub struct OwnershipIssues {
     /// All non-standard ownership statuses.
     issues: Vec<OwnershipIssue>,
 }
 
 impl OwnershipIssues {
     /// Get all ownership issues.
-    pub(crate) fn issues(&self) -> &[OwnershipIssue] {
+    pub fn issues(&self) -> &[OwnershipIssue] {
         &self.issues
     }
 
     /// Check if ownership is valid (no issues).
-    pub(crate) fn is_valid(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         self.issues.is_empty()
     }
 
     /// Get overconsumed values.
-    pub(crate) fn overconsumed(&self) -> impl Iterator<Item = (ValueId, usize)> {
+    pub fn overconsumed(&self) -> impl Iterator<Item = (ValueId, usize)> {
         self.issues.iter().filter_map(|s| match s {
             OwnershipIssue::Overconsumed { value, move_count } => Some((*value, *move_count)),
             _ => None,
@@ -47,7 +47,7 @@ impl OwnershipIssues {
     }
 
     /// Get leaked values.
-    pub(crate) fn leaked(&self) -> impl Iterator<Item = ValueId> {
+    pub fn leaked(&self) -> impl Iterator<Item = ValueId> {
         self.issues.iter().filter_map(|s| match s {
             OwnershipIssue::Leaked { value } => Some(*value),
             _ => None,
@@ -66,7 +66,7 @@ impl Analysis for OwnershipIssues {
             let move_count = value
                 .get_uses()
                 .iter()
-                .filter(|u| u.mode == Ownership::Move)
+                .filter(|u| u.get_mode() == Ownership::Move)
                 .count();
 
             match move_count {

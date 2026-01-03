@@ -8,7 +8,7 @@ use crate::{error::Result, handles::Ownership};
 ///
 /// A gate is a descriptor for a computational operation.
 /// Typically implemented as an enum of all possible gate types.
-pub(super) trait Gate: Eq + Copy {
+pub trait Gate: Eq + Copy {
     /// Number of inputs the gate consumes.
     fn input_count(&self) -> usize;
 

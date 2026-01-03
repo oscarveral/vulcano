@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Result of element reachability analysis.
-pub(crate) struct ElementReachability {
+pub struct ElementReachability {
     /// Values reachable from circuit outputs.
     values: HashSet<ValueId>,
     /// Operations reachable from circuit outputs.
@@ -23,22 +23,22 @@ pub(crate) struct ElementReachability {
 
 impl ElementReachability {
     /// Check if a value is reachable.
-    pub(crate) fn is_value_reachable(&self, value: ValueId) -> bool {
+    pub fn is_value_reachable(&self, value: ValueId) -> bool {
         self.values.contains(&value)
     }
 
     /// Check if an operation is reachable.
-    pub(crate) fn is_operation_reachable(&self, op: Operation) -> bool {
+    pub fn is_operation_reachable(&self, op: Operation) -> bool {
         self.operations.contains(&op)
     }
 
     /// Get all reachable values.
-    pub(crate) fn reachable_values(&self) -> &HashSet<ValueId> {
+    pub fn reachable_values(&self) -> &HashSet<ValueId> {
         &self.values
     }
 
     /// Get all reachable operations.
-    pub(crate) fn reachable_operations(&self) -> &HashSet<Operation> {
+    pub fn reachable_operations(&self) -> &HashSet<Operation> {
         &self.operations
     }
 }

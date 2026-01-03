@@ -13,110 +13,127 @@ use crate::{
 use vulcano_arena::Arena;
 
 /// A gate operation: user-defined computation.
-pub(super) struct GateOperation<G: Gate> {
+pub struct GateOperation<G: Gate> {
     /// The gate descriptor.
-    pub gate: G,
+    gate: G,
     /// Input values.
-    pub inputs: Vec<ValueId>,
+    inputs: Vec<ValueId>,
     /// Output values.
-    pub outputs: Vec<ValueId>,
+    outputs: Vec<ValueId>,
 }
 
 impl<G: Gate> GateOperation<G> {
     /// Get the gate descriptor.
-    pub(super) fn get_gate(&self) -> &G {
+    pub fn get_gate(&self) -> &G {
         &self.gate
     }
 
     /// Get the input values.
-    pub(super) fn get_inputs(&self) -> &[ValueId] {
+    pub fn get_inputs(&self) -> &[ValueId] {
         &self.inputs
     }
 
     /// Get the output values.
-    pub(super) fn get_outputs(&self) -> &[ValueId] {
+    pub fn get_outputs(&self) -> &[ValueId] {
         &self.outputs
     }
 }
 
 /// Clone operation: borrow one value, produce N copies.
-pub(super) struct CloneOperation {
+pub struct CloneOperation {
     /// The input value.
-    pub input: ValueId,
+    input: ValueId,
     /// The output values.
-    pub outputs: Vec<ValueId>,
+    outputs: Vec<ValueId>,
 }
 
 impl CloneOperation {
     /// Get the input value.
-    pub(super) fn get_input(&self) -> ValueId {
+    pub fn get_input(&self) -> ValueId {
         self.input
     }
 
     /// Get the output values.
-    pub(super) fn get_outputs(&self) -> &[ValueId] {
+    pub fn get_outputs(&self) -> &[ValueId] {
         &self.outputs
     }
 
     /// Get the number of output copies.
-    pub(super) fn output_count(&self) -> usize {
+    pub fn output_count(&self) -> usize {
         self.outputs.len()
     }
 }
 
 /// Drop operation: consume a value, produce nothing.
-pub(super) struct DropOperation {
+pub struct DropOperation {
     /// The input value.
-    pub input: ValueId,
+    input: ValueId,
 }
 
 impl DropOperation {
     /// Get the input value.
-    pub(super) fn get_input(&self) -> ValueId {
+    pub fn get_input(&self) -> ValueId {
         self.input
     }
 }
 
 /// Input operation: external circuit input, produces one value.
-pub(super) struct InputOperation {
+pub struct InputOperation {
     /// The output value.
     output: ValueId,
 }
 
 impl InputOperation {
     /// Get the output value.
-    pub(super) fn get_output(&self) -> ValueId {
+    pub fn get_output(&self) -> ValueId {
         self.output
     }
 }
 
 /// Output operation: circuit output, consumes one value.
-pub(super) struct OutputOperation {
+pub struct OutputOperation {
     /// The input value.
     input: ValueId,
 }
 
 impl OutputOperation {
     /// Get the input value.
-    pub(super) fn get_input(&self) -> ValueId {
+    pub fn get_input(&self) -> ValueId {
         self.input
     }
 }
 
 /// A specific usage of a value.
 #[derive(Clone, Copy, Debug)]
-pub(super) struct Usage {
+pub struct Usage {
     /// Who consumes this value.
-    pub consumer: Consumer,
+    consumer: Consumer,
     /// Which input port on the consumer.
-    pub port: PortId,
+    port: PortId,
     /// Access mode of the value.
-    pub mode: Ownership,
+    mode: Ownership,
+}
+
+impl Usage {
+    /// Get the consumer.
+    pub fn get_consumer(&self) -> Consumer {
+        self.consumer
+    }
+
+    /// Get the port.
+    pub fn get_port(&self) -> PortId {
+        self.port
+    }
+
+    /// Get the mode.
+    pub fn get_mode(&self) -> Ownership {
+        self.mode
+    }
 }
 
 /// What consumes a value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Consumer {
+pub enum Consumer {
     /// Used by a gate.
     Gate(GateId),
     /// Used by a clone.
@@ -142,35 +159,35 @@ impl TryFrom<Operation> for Consumer {
 }
 
 /// An SSA value: defined exactly once, consumed exactly once.
-pub(super) struct Value<G: Gate> {
+pub struct Value<G: Gate> {
     /// Who produces this value.
-    pub producer: Producer,
+    producer: Producer,
     /// Which output port of the producer.
-    pub port: PortId,
+    port: PortId,
     /// All uses of this value.
-    pub uses: Vec<Usage>,
+    uses: Vec<Usage>,
     /// Type of the value.
-    pub value_type: G::Operand,
+    value_type: G::Operand,
 }
 
 impl<G: Gate> Value<G> {
     /// Get the producer of this value.
-    pub(super) fn get_producer(&self) -> Producer {
+    pub fn get_producer(&self) -> Producer {
         self.producer
     }
 
     /// Get the output port of the producer.
-    pub(super) fn get_port(&self) -> PortId {
+    pub fn get_port(&self) -> PortId {
         self.port
     }
 
     /// Get all uses of this value.
-    pub(super) fn get_uses(&self) -> &[Usage] {
+    pub fn get_uses(&self) -> &[Usage] {
         &self.uses
     }
 
     /// Check if this value has exactly one Move consumer.
-    pub(super) fn has_single_move(&self) -> bool {
+    pub fn has_single_move(&self) -> bool {
         self.uses
             .iter()
             .filter(|u| u.mode == Ownership::Move)
@@ -179,7 +196,7 @@ impl<G: Gate> Value<G> {
     }
 
     /// Get the the consumer, if exactly one exists.
-    pub(super) fn get_move_consumer(&self) -> Option<&Usage> {
+    pub fn get_move_consumer(&self) -> Option<&Usage> {
         let moves: Vec<_> = self
             .uses
             .iter()
@@ -193,19 +210,19 @@ impl<G: Gate> Value<G> {
     }
 
     /// Get all borrow consumers.
-    pub(super) fn get_borrow_consumers(&self) -> impl Iterator<Item = &Usage> {
+    pub fn get_borrow_consumers(&self) -> impl Iterator<Item = &Usage> {
         self.uses.iter().filter(|u| u.mode == Ownership::Borrow)
     }
 
     /// Get the type of this value.
-    pub(super) fn get_type(&self) -> G::Operand {
+    pub fn get_type(&self) -> G::Operand {
         self.value_type
     }
 }
 
 /// What produces a value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Producer {
+pub enum Producer {
     /// External circuit input.
     Input(InputId),
     /// Produced by a gate.
@@ -229,7 +246,7 @@ impl TryFrom<Operation> for Producer {
 
 /// A schedulable operation in the circuit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(super) enum Operation {
+pub enum Operation {
     /// Circuit input.
     Input(InputId),
     /// A gate computation.
@@ -264,7 +281,7 @@ impl From<Producer> for Operation {
 }
 
 /// A circuit in Linear SSA form.
-pub(super) struct Circuit<G: Gate> {
+pub struct Circuit<G: Gate> {
     /// All gates, indexed by GateId.
     gates: Arena<GateOperation<G>>,
     /// All clones, indexed by CloneId.
@@ -281,7 +298,7 @@ pub(super) struct Circuit<G: Gate> {
 
 impl<G: Gate> Circuit<G> {
     /// Create a new empty circuit.
-    pub(super) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             gates: Arena::new(),
             clones: Arena::new(),
@@ -315,7 +332,7 @@ impl<G: Gate> Circuit<G> {
     }
 
     /// Get all move usages of a value.
-    pub(super) fn get_move_uses(&self, value: ValueId) -> Vec<Usage> {
+    pub fn get_move_uses(&self, value: ValueId) -> Vec<Usage> {
         self.values
             .get(value.key())
             .map(|v| {
@@ -330,7 +347,7 @@ impl<G: Gate> Circuit<G> {
 
     /// Rewire a use from one value to another.
     /// Finds the usage matching (consumer, port) on old_value and moves it to new_value.
-    pub(super) fn rewire_use(
+    pub fn rewire_use(
         &mut self,
         old_value: ValueId,
         new_value: ValueId,
@@ -357,7 +374,7 @@ impl<G: Gate> Circuit<G> {
     }
 
     /// Create a circuit input.
-    pub(super) fn add_input(&mut self, value_type: G::Operand) -> (InputId, ValueId) {
+    pub fn add_input(&mut self, value_type: G::Operand) -> (InputId, ValueId) {
         // Reserve input slot to get key
         let input_key = self.inputs.reserve();
         let input_id = InputId::new(input_key);
@@ -373,7 +390,7 @@ impl<G: Gate> Circuit<G> {
     }
 
     /// Mark a value as a circuit output.
-    pub(super) fn add_output(&mut self, value: ValueId) -> OutputId {
+    pub fn add_output(&mut self, value: ValueId) -> OutputId {
         let output_key = self.outputs.insert(OutputOperation { input: value });
         let output_id = OutputId::new(output_key);
 
@@ -387,11 +404,7 @@ impl<G: Gate> Circuit<G> {
     }
 
     /// Add a gate.
-    pub(super) fn add_gate(
-        &mut self,
-        gate: G,
-        inputs: Vec<ValueId>,
-    ) -> Result<(GateId, Vec<ValueId>)> {
+    pub fn add_gate(&mut self, gate: G, inputs: Vec<ValueId>) -> Result<(GateId, Vec<ValueId>)> {
         let expected = gate.input_count();
         if inputs.len() != expected {
             return Err(Error::WrongInputCount {
@@ -470,7 +483,7 @@ impl<G: Gate> Circuit<G> {
     }
 
     /// Clone a value into N copies.
-    pub(super) fn add_clone(&mut self, input: ValueId, count: usize) -> (CloneId, Vec<ValueId>) {
+    pub fn add_clone(&mut self, input: ValueId, count: usize) -> (CloneId, Vec<ValueId>) {
         let clone_key = self.clones.reserve();
         let clone_id = CloneId::new(clone_key);
 
@@ -502,7 +515,7 @@ impl<G: Gate> Circuit<G> {
     }
 
     /// Drop a value.
-    pub(super) fn add_drop(&mut self, input: ValueId) -> DropId {
+    pub fn add_drop(&mut self, input: ValueId) -> DropId {
         let drop_key = self.drops.insert(DropOperation { input });
         let drop_id = DropId::new(drop_key);
 
@@ -518,127 +531,127 @@ impl<G: Gate> Circuit<G> {
     }
 
     /// Get a gate by id.
-    pub(super) fn gate_op(&self, id: GateId) -> Result<&GateOperation<G>> {
+    pub fn gate_op(&self, id: GateId) -> Result<&GateOperation<G>> {
         self.gates.get(id.key()).ok_or(Error::GateNotFound(id))
     }
 
     /// Get a clone by id.
-    pub(super) fn clone_op(&self, id: CloneId) -> Result<&CloneOperation> {
+    pub fn clone_op(&self, id: CloneId) -> Result<&CloneOperation> {
         self.clones.get(id.key()).ok_or(Error::CloneNotFound(id))
     }
 
     /// Get a drop by id.
-    pub(super) fn drop_op(&self, id: DropId) -> Result<&DropOperation> {
+    pub fn drop_op(&self, id: DropId) -> Result<&DropOperation> {
         self.drops.get(id.key()).ok_or(Error::DropNotFound(id))
     }
 
     /// Get a input by id.
-    pub(super) fn input_op(&self, id: InputId) -> Result<&InputOperation> {
+    pub fn input_op(&self, id: InputId) -> Result<&InputOperation> {
         self.inputs.get(id.key()).ok_or(Error::InputNotFound(id))
     }
 
     /// Get a output by id.
-    pub(super) fn output_op(&self, id: OutputId) -> Result<&OutputOperation> {
+    pub fn output_op(&self, id: OutputId) -> Result<&OutputOperation> {
         self.outputs.get(id.key()).ok_or(Error::OutputNotFound(id))
     }
 
     /// Get a value by id.
-    pub(super) fn value(&self, id: ValueId) -> Result<&Value<G>> {
+    pub fn value(&self, id: ValueId) -> Result<&Value<G>> {
         self.values.get(id.key()).ok_or(Error::ValueNotFound(id))
     }
 
     /// Remove a gate by id (does not update cross-references).
-    pub(super) fn remove_gate_unchecked(&mut self, id: GateId) {
+    pub fn remove_gate_unchecked(&mut self, id: GateId) {
         self.gates.remove(id.key());
     }
 
     /// Remove a clone by id (does not update cross-references).
-    pub(super) fn remove_clone_unchecked(&mut self, id: CloneId) {
+    pub fn remove_clone_unchecked(&mut self, id: CloneId) {
         self.clones.remove(id.key());
     }
 
     /// Remove a drop by id (does not update cross-references).
-    pub(super) fn remove_drop_unchecked(&mut self, id: DropId) {
+    pub fn remove_drop_unchecked(&mut self, id: DropId) {
         self.drops.remove(id.key());
     }
 
     /// Remove an input by id (does not update cross-references).
-    pub(super) fn remove_input_unchecked(&mut self, id: InputId) {
+    pub fn remove_input_unchecked(&mut self, id: InputId) {
         self.inputs.remove(id.key());
     }
 
     /// Remove an output by id (does not update cross-references).
-    pub(super) fn remove_output_unchecked(&mut self, id: OutputId) {
+    pub fn remove_output_unchecked(&mut self, id: OutputId) {
         self.outputs.remove(id.key());
     }
 
     /// Remove a value by id (does not update cross-references).
-    pub(super) fn remove_value_unchecked(&mut self, id: ValueId) {
+    pub fn remove_value_unchecked(&mut self, id: ValueId) {
         self.values.remove(id.key());
     }
 
     /// Number of gates.
-    pub(super) fn gate_count(&self) -> usize {
+    pub fn gate_count(&self) -> usize {
         self.gates.len()
     }
 
     /// Number of clones.
-    pub(super) fn clone_count(&self) -> usize {
+    pub fn clone_count(&self) -> usize {
         self.clones.len()
     }
 
     /// Number of drops.
-    pub(super) fn drop_count(&self) -> usize {
+    pub fn drop_count(&self) -> usize {
         self.drops.len()
     }
 
     /// Number of circuit inputs.
-    pub(super) fn input_count(&self) -> usize {
+    pub fn input_count(&self) -> usize {
         self.inputs.len()
     }
 
     /// Number of circuit outputs.
-    pub(super) fn output_count(&self) -> usize {
+    pub fn output_count(&self) -> usize {
         self.outputs.len()
     }
 
     /// Number of values.
-    pub(super) fn value_count(&self) -> usize {
+    pub fn value_count(&self) -> usize {
         self.values.len()
     }
 
     /// Iterate over all gates.
-    pub(super) fn all_gates(&self) -> impl Iterator<Item = (GateId, &GateOperation<G>)> {
+    pub fn all_gates(&self) -> impl Iterator<Item = (GateId, &GateOperation<G>)> {
         self.gates.iter().map(|(k, g)| (GateId::new(k), g))
     }
 
     /// Iterate over all clones.
-    pub(super) fn all_clones(&self) -> impl Iterator<Item = (CloneId, &CloneOperation)> {
+    pub fn all_clones(&self) -> impl Iterator<Item = (CloneId, &CloneOperation)> {
         self.clones.iter().map(|(k, c)| (CloneId::new(k), c))
     }
 
     /// Iterate over all drops.
-    pub(super) fn all_drops(&self) -> impl Iterator<Item = (DropId, &DropOperation)> {
+    pub fn all_drops(&self) -> impl Iterator<Item = (DropId, &DropOperation)> {
         self.drops.iter().map(|(k, d)| (DropId::new(k), d))
     }
 
     /// Iterate over all circuit inputs.
-    pub(super) fn all_inputs(&self) -> impl Iterator<Item = (InputId, &InputOperation)> {
+    pub fn all_inputs(&self) -> impl Iterator<Item = (InputId, &InputOperation)> {
         self.inputs.iter().map(|(k, op)| (InputId::new(k), op))
     }
 
     /// Iterate over all circuit outputs.
-    pub(super) fn all_outputs(&self) -> impl Iterator<Item = (OutputId, &OutputOperation)> {
+    pub fn all_outputs(&self) -> impl Iterator<Item = (OutputId, &OutputOperation)> {
         self.outputs.iter().map(|(k, op)| (OutputId::new(k), op))
     }
 
     /// Iterate over all values.
-    pub(super) fn all_values(&self) -> impl Iterator<Item = (ValueId, &Value<G>)> {
+    pub fn all_values(&self) -> impl Iterator<Item = (ValueId, &Value<G>)> {
         self.values.iter().map(|(k, v)| (ValueId::new(k), v))
     }
 
     /// Iterate over all operations in the circuit.
-    pub(super) fn all_operations(&self) -> impl Iterator<Item = Operation> + '_ {
+    pub fn all_operations(&self) -> impl Iterator<Item = Operation> + '_ {
         self.all_inputs()
             .map(|(id, _)| Operation::Input(id))
             .chain(self.all_gates().map(|(id, _)| Operation::Gate(id)))
@@ -648,7 +661,7 @@ impl<G: Gate> Circuit<G> {
     }
 
     /// Iterate over values produced by an operation.
-    pub(super) fn produced_values(&self, op: Operation) -> impl Iterator<Item = ValueId> {
+    pub fn produced_values(&self, op: Operation) -> impl Iterator<Item = ValueId> {
         let (input_val, gate_vals, clone_vals): (Option<ValueId>, &[ValueId], &[ValueId]) = match op
         {
             Operation::Input(id) => {

@@ -11,7 +11,7 @@ use crate::{
 
 /// Errors that can occur in this crate.
 #[derive(Debug)]
-pub(super) enum Error {
+pub enum Error {
     /// Gate not found.
     GateNotFound(GateId),
     /// Clone not found.
@@ -94,4 +94,4 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 /// Result type alias for this crate.
-pub(super) type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
