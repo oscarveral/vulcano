@@ -66,7 +66,7 @@ impl ValueLiveness {
     }
 
     /// Get values that are live at a specific schedule position.
-    pub fn live_at(&self, position: usize) -> impl Iterator<Item = ValueId> + '_ {
+    pub fn live_at(&self, position: usize) -> impl Iterator<Item = ValueId> {
         self.live_ranges
             .iter()
             .filter(move |(_, r)| r.birth <= position && position < r.death)
@@ -74,10 +74,10 @@ impl ValueLiveness {
     }
 }
 
-impl Analysis for ValueLiveness {
+impl<G: Gate> Analysis<G> for ValueLiveness {
     type Output = Self;
 
-    fn run<G: Gate>(circuit: &Circuit<G>, analyzer: &mut Analyzer<G>) -> Result<Self::Output> {
+    fn run(circuit: &Circuit<G>, analyzer: &mut Analyzer<G>) -> Result<Self::Output> {
         // Depend on scheduled order analysis.
         let schedule = analyzer.get::<ScheduledOrder>(circuit)?;
 

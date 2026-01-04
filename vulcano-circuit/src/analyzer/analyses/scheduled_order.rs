@@ -88,10 +88,10 @@ impl ScheduledOrder {
     }
 }
 
-impl Analysis for ScheduledOrder {
+impl<G: Gate> Analysis<G> for ScheduledOrder {
     type Output = Self;
 
-    fn run<G: Gate>(circuit: &Circuit<G>, _analyzer: &mut Analyzer<G>) -> Result<Self::Output> {
+    fn run(circuit: &Circuit<G>, _analyzer: &mut Analyzer<G>) -> Result<Self::Output> {
         // Step 1. Initialize in-degree for each operation.
         let mut in_degree: HashMap<Operation, usize> = HashMap::new();
 

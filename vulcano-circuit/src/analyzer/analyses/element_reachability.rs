@@ -43,10 +43,10 @@ impl ElementReachability {
     }
 }
 
-impl Analysis for ElementReachability {
+impl<G: Gate> Analysis<G> for ElementReachability {
     type Output = Self;
 
-    fn run<G: Gate>(circuit: &Circuit<G>, _analyzer: &mut Analyzer<G>) -> Result<Self::Output> {
+    fn run(circuit: &Circuit<G>, _analyzer: &mut Analyzer<G>) -> Result<Self::Output> {
         let mut values = HashSet::new();
         let mut operations = HashSet::new();
         let mut worklist: Vec<ValueId> = Vec::new();

@@ -55,10 +55,10 @@ impl OwnershipIssues {
     }
 }
 
-impl Analysis for OwnershipIssues {
+impl<G: Gate> Analysis<G> for OwnershipIssues {
     type Output = Self;
 
-    fn run<G: Gate>(circuit: &Circuit<G>, _analyzer: &mut Analyzer<G>) -> Result<Self::Output> {
+    fn run(circuit: &Circuit<G>, _analyzer: &mut Analyzer<G>) -> Result<Self::Output> {
         let mut issues = Vec::new();
 
         for (value_id, value) in circuit.all_values() {

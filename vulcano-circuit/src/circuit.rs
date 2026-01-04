@@ -651,7 +651,7 @@ impl<G: Gate> Circuit<G> {
     }
 
     /// Iterate over all operations in the circuit.
-    pub fn all_operations(&self) -> impl Iterator<Item = Operation> + '_ {
+    pub fn all_operations(&self) -> impl Iterator<Item = Operation> {
         self.all_inputs()
             .map(|(id, _)| Operation::Input(id))
             .chain(self.all_gates().map(|(id, _)| Operation::Gate(id)))

@@ -2,13 +2,15 @@
 //!
 //! This module defines the trait for user-defined gates.
 
+use std::hash::Hash;
+
 use crate::{error::Result, handles::Ownership};
 
 /// Trait implemented by a gate used inside a circuit.
 ///
 /// A gate is a descriptor for a computational operation.
 /// Typically implemented as an enum of all possible gate types.
-pub trait Gate: Eq + Copy {
+pub trait Gate: Eq + Copy + 'static {
     /// Number of inputs the gate consumes.
     fn input_count(&self) -> usize;
 
@@ -16,7 +18,7 @@ pub trait Gate: Eq + Copy {
     fn output_count(&self) -> usize;
 
     /// The type descriptor for operands (e.g., ciphertext, plaintext).
-    type Operand: Eq + Copy;
+    type Operand: Eq + Copy + Hash + 'static;
 
     /// Returns the operand type at the given input index.
     fn input_type(&self, idx: usize) -> Result<Self::Operand>;

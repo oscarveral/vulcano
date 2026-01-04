@@ -17,12 +17,12 @@ use std::{
 };
 
 /// Trait for analyses that can be performed on circuits.
-pub trait Analysis: 'static {
+pub trait Analysis<G: Gate>: 'static {
     /// The output type of the analysis.
-    type Output;
+    type Output: 'static;
 
     /// Run the analysis on the given circuit.
-    fn run<T: Gate>(circuit: &Circuit<T>, analyzer: &mut Analyzer<T>) -> Result<Self::Output>;
+    fn run(circuit: &Circuit<G>, analyzer: &mut Analyzer<G>) -> Result<Self::Output>;
 }
 
 /// Manages and caches analyses on circuits.
@@ -45,7 +45,7 @@ impl<T: Gate> Analyzer<T> {
     /// Get the result of an analysis, computing and caching it if necessary.
     pub fn get<A>(&mut self, circuit: &Circuit<T>) -> Result<Rc<A::Output>>
     where
-        A: Analysis,
+        A: Analysis<T>,
     {
         let key = TypeId::of::<A>();
 

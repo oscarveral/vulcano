@@ -31,10 +31,10 @@ impl TopologicalOrder {
     }
 }
 
-impl Analysis for TopologicalOrder {
+impl<G: Gate> Analysis<G> for TopologicalOrder {
     type Output = Self;
 
-    fn run<G: Gate>(circuit: &Circuit<G>, _analyzer: &mut Analyzer<G>) -> Result<Self::Output> {
+    fn run(circuit: &Circuit<G>, _analyzer: &mut Analyzer<G>) -> Result<Self::Output> {
         // Step 1. Storage used to map each operation to its in-degree.
         let mut in_degree: HashMap<Operation, usize> = HashMap::new();
 
