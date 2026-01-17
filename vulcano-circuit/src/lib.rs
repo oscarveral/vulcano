@@ -5,5 +5,4 @@ pub mod analyzer;
 pub mod circuit;
 pub mod error;
 pub mod gate;
-pub mod handles;
 pub mod optimizer;

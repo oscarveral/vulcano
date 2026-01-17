@@ -4,7 +4,7 @@
 
 use std::hash::Hash;
 
-use crate::{error::Result, handles::Ownership};
+use crate::{circuit::value::Ownership, error::Result};
 
 /// Trait implemented by a gate used inside a circuit.
 ///

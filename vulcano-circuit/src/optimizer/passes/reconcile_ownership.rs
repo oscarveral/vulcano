@@ -23,7 +23,7 @@ pub fn reconcile_ownership<G: Gate>(
 
     // Insert drops for leaked values.
     for value_id in issues.leaked() {
-        circuit.add_drop(value_id);
+        circuit.add_drop(value_id)?;
     }
 
     // Insert clones for overconsumed values.
@@ -35,7 +35,7 @@ pub fn reconcile_ownership<G: Gate>(
         let move_uses = circuit.get_move_uses(value_id);
 
         // Insert clone that produces (N-1) copies.
-        let (_, clone_outputs) = circuit.add_clone(value_id, clone_count);
+        let (_, clone_outputs) = circuit.add_clone(value_id, clone_count)?;
 
         // Rewire all but the first move to use clone outputs instead.
         for (usage, clone_output) in move_uses.iter().skip(1).zip(clone_outputs.iter()) {

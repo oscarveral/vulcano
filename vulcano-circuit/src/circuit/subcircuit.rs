@@ -1,0 +1,480 @@
+//! Subcircuit definitions.
+//!
+//! This module defines a subcircuit as a sort of static single
+//! assignment form of values produced and consumed or borrowed
+//! in order to create or output other values.
+
+use vulcano_arena::{Arena, Key};
+
+use crate::{
+    circuit::{
+        operations::{
+            Consumer, Operation, PortId, Producer,
+            clone::{CloneId, CloneOp},
+            drop::{DropId, DropOp},
+            gate::{GateId, GateOp},
+            input::{InputId, InputOp},
+            output::{OutputId, OutputOp},
+        },
+        value::{Destination, Origin, Ownership, Value, ValueId},
+    },
+    error::{Error, Result},
+    gate::Gate,
+};
+
+/// Handle identifying a specific subcircuit.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct CircuitId(Key);
+
+impl CircuitId {
+    /// Create a new circuit id from a key.
+    pub fn new(key: Key) -> Self {
+        Self(key)
+    }
+
+    /// Return the underlying key.
+    pub fn key(self) -> Key {
+        self.0
+    }
+}
+
+/// A subcircuit in Linear SSA form.
+pub struct Subcircuit<G: Gate> {
+    /// Id of this circuit.
+    id: CircuitId,
+    /// All gates.
+    gates: Arena<GateOp<G>>,
+    /// All clones.
+    clones: Arena<CloneOp>,
+    /// All drops.
+    drops: Arena<DropOp>,
+    /// Circuit inputs.
+    inputs: Arena<InputOp>,
+    /// Circuit outputs.
+    outputs: Arena<OutputOp>,
+    /// All values.
+    values: Arena<Value<G>>,
+}
+
+impl<G: Gate> Subcircuit<G> {
+    /// Create a new empty circuit.
+    pub fn new(id: CircuitId) -> Self {
+        Self {
+            id,
+            gates: Arena::new(),
+            clones: Arena::new(),
+            drops: Arena::new(),
+            values: Arena::new(),
+            inputs: Arena::new(),
+            outputs: Arena::new(),
+        }
+    }
+
+    /// Get the circuit id.
+    pub fn id(&self) -> CircuitId {
+        self.id
+    }
+
+    /// Validate that a value belongs to this circuit and exists.
+    fn validate_value(&self, value: ValueId) -> Result<()> {
+        if value.circuit() != self.id {
+            return Err(Error::CircuitIdMismatch(value, self.id));
+        }
+        if self.values.get(value.key()).is_none() {
+            return Err(Error::ValueNotFound(value));
+        }
+        Ok(())
+    }
+    /// Add a destination to a value.
+    fn link_destination(&mut self, value: ValueId, destination: Destination) -> Result<()> {
+        let value_ref = self
+            .values
+            .get_mut(value.key())
+            .ok_or(Error::ValueNotFound(value))?;
+        value_ref.add_destination(destination);
+        Ok(())
+    }
+
+    /// Add a new input to the circuit.
+    pub fn add_input(&mut self, operand: G::Operand) -> Result<(InputId, ValueId)> {
+        // Reserve keys and create IDs.
+        let input_id = InputId::new(self.id, self.inputs.reserve());
+        let value_id = ValueId::new(self.id, self.values.reserve());
+
+        // Create the input and its produced value.
+        let input = InputOp::new(value_id);
+        let origin = Origin::new(Producer::Input(input_id), PortId::new(0));
+        let value = Value::new(origin, operand);
+
+        // Helper to cleanup on failure.
+        let cleanup = |s: &mut Self| {
+            s.inputs.remove(input_id.key());
+            s.values.remove(value_id.key());
+        };
+
+        // Fill arenas.
+        if self.inputs.fill(input_id.key(), input).is_err() {
+            cleanup(self);
+            return Err(Error::FailedToCreateInput(input_id));
+        }
+        if self.values.fill(value_id.key(), value).is_err() {
+            cleanup(self);
+            return Err(Error::FailedToCreateValue(value_id));
+        }
+
+        Ok((input_id, value_id))
+    }
+
+    /// Add a new output to the circuit.
+    pub fn add_output(&mut self, value: ValueId) -> Result<OutputId> {
+        // Validate the input value exists.
+        self.validate_value(value)?;
+
+        // Reserve key and create output.
+        let output_id = OutputId::new(self.id, self.outputs.reserve());
+        let output = OutputOp::new(value);
+
+        // Fill arena.
+        if self.outputs.fill(output_id.key(), output).is_err() {
+            self.outputs.remove(output_id.key());
+            return Err(Error::FailedToCreateOutput(output_id));
+        }
+
+        // Link the value to this consumer.
+        let destination =
+            Destination::new(Consumer::Output(output_id), PortId::new(0), Ownership::Move);
+        if let Err(err) = self.link_destination(value, destination) {
+            self.outputs.remove(output_id.key());
+            return Err(err);
+        }
+
+        Ok(output_id)
+    }
+
+    /// Add a new drop to the circuit.
+    pub fn add_drop(&mut self, value: ValueId) -> Result<DropId> {
+        // Validate the input value exists.
+        self.validate_value(value)?;
+
+        // Reserve key and create drop.
+        let drop_id = DropId::new(self.id, self.drops.reserve());
+        let drop_op = DropOp::new(value);
+
+        // Fill arena.
+        if self.drops.fill(drop_id.key(), drop_op).is_err() {
+            self.drops.remove(drop_id.key());
+            return Err(Error::FailedToCreateDrop(drop_id));
+        }
+
+        // Link the value to this consumer.
+        let destination =
+            Destination::new(Consumer::Drop(drop_id), PortId::new(0), Ownership::Move);
+        if let Err(err) = self.link_destination(value, destination) {
+            self.drops.remove(drop_id.key());
+            return Err(err);
+        }
+
+        Ok(drop_id)
+    }
+
+    /// Add a new clone operation to the circuit.
+    pub fn add_clone(
+        &mut self,
+        value: ValueId,
+        quantity: usize,
+    ) -> Result<(CloneId, Vec<ValueId>)> {
+        // Validate quantity.
+        if quantity == 0 {
+            return Err(Error::InvalidCloneQuantity);
+        }
+
+        // Validate the input value exists and get its type.
+        let value_type = self.value(value)?.get_type();
+
+        // Reserve keys and create IDs.
+        let clone_id = CloneId::new(self.id, self.clones.reserve());
+        let output_ids: Vec<ValueId> = (0..quantity)
+            .map(|_| ValueId::new(self.id, self.values.reserve()))
+            .collect();
+
+        // Helper to cleanup on failure.
+        let cleanup = |s: &mut Self, destination_linked: bool| {
+            // Remove the destination from the input value if it was linked.
+            if destination_linked && let Some(v) = s.values.get_mut(value.key()) {
+                v.remove_destinations_for(Consumer::Clone(clone_id));
+            }
+            // Remove the clone and output values.
+            s.clones.remove(clone_id.key());
+            for output_id in &output_ids {
+                s.values.remove(output_id.key());
+            }
+        };
+
+        // Create the clone operation.
+        let clone_op = CloneOp::new(value, output_ids.clone());
+
+        // Create output values.
+        let producer = Producer::Clone(clone_id);
+        let output_values: Vec<Value<G>> = (0..quantity)
+            .map(|i| {
+                let origin = Origin::new(producer, PortId::new(i));
+                Value::new(origin, value_type)
+            })
+            .collect();
+
+        // Fill clone arena.
+        if self.clones.fill(clone_id.key(), clone_op).is_err() {
+            cleanup(self, false);
+            return Err(Error::FailedToCreateClone(clone_id));
+        }
+
+        // Fill value arenas.
+        for (output_id, output_value) in output_ids.iter().zip(output_values) {
+            if self.values.fill(output_id.key(), output_value).is_err() {
+                cleanup(self, false);
+                return Err(Error::FailedToCreateValue(*output_id));
+            }
+        }
+
+        // Link the input value to this consumer (borrow).
+        let destination =
+            Destination::new(Consumer::Clone(clone_id), PortId::new(0), Ownership::Borrow);
+        if let Err(err) = self.link_destination(value, destination) {
+            cleanup(self, false);
+            return Err(err);
+        }
+
+        Ok((clone_id, output_ids))
+    }
+
+    /// Add a new gate to the circuit.
+    pub fn add_gate(&mut self, inputs: &[ValueId], gate: G) -> Result<(GateId, Vec<ValueId>)> {
+        // Validate all input values exist.
+        for &input in inputs {
+            self.validate_value(input)?;
+        }
+
+        // Reserve keys and create IDs.
+        let gate_id = GateId::new(self.id, self.gates.reserve());
+        let output_count = gate.output_count();
+        let output_ids: Vec<ValueId> = (0..output_count)
+            .map(|_| ValueId::new(self.id, self.values.reserve()))
+            .collect();
+
+        // Helper to cleanup on failure.
+        let cleanup = |s: &mut Self, linked_inputs: &[ValueId]| {
+            // Remove destinations we already linked.
+            let consumer = Consumer::Gate(gate_id);
+            for input in linked_inputs {
+                if let Some(v) = s.values.get_mut(input.key()) {
+                    v.remove_destinations_for(consumer);
+                }
+            }
+            // Remove the gate and output values.
+            s.gates.remove(gate_id.key());
+            for output_id in &output_ids {
+                s.values.remove(output_id.key());
+            }
+        };
+
+        // Create the gate operation.
+        let gate_op = match GateOp::new(gate, inputs.to_vec(), output_ids.clone()) {
+            Ok(op) => op,
+            Err(err) => {
+                cleanup(self, &[]);
+                return Err(err);
+            }
+        };
+
+        // Create output values.
+        let producer = Producer::Gate(gate_id);
+        let output_values: Vec<Value<G>> = match (0..output_count)
+            .map(|i| {
+                let origin = Origin::new(producer, PortId::new(i));
+                let operand = gate.output_type(i)?;
+                Ok(Value::new(origin, operand))
+            })
+            .collect::<Result<Vec<_>>>()
+        {
+            Ok(values) => values,
+            Err(err) => {
+                cleanup(self, &[]);
+                return Err(err);
+            }
+        };
+
+        // Fill gate arena.
+        if self.gates.fill(gate_id.key(), gate_op).is_err() {
+            cleanup(self, &[]);
+            return Err(Error::FailedToCreateGate(gate_id));
+        }
+
+        // Fill value arenas.
+        for (output_id, value) in output_ids.iter().zip(output_values) {
+            if self.values.fill(output_id.key(), value).is_err() {
+                cleanup(self, &[]);
+                return Err(Error::FailedToCreateValue(*output_id));
+            }
+        }
+
+        // Link each input value to this consumer.
+        let access_modes = match gate.access_modes() {
+            Ok(modes) => modes,
+            Err(err) => {
+                cleanup(self, &[]);
+                return Err(err);
+            }
+        };
+        let mut linked_inputs: Vec<ValueId> = Vec::new();
+        for (port_idx, (&input, mode)) in inputs.iter().zip(access_modes).enumerate() {
+            let destination =
+                Destination::new(Consumer::Gate(gate_id), PortId::new(port_idx), mode);
+            if let Err(err) = self.link_destination(input, destination) {
+                cleanup(self, &linked_inputs);
+                return Err(err);
+            }
+            linked_inputs.push(input);
+        }
+
+        Ok((gate_id, output_ids))
+    }
+
+    /// Iterate over all values in the circuit.
+    pub fn all_values(&self) -> impl Iterator<Item = (ValueId, &Value<G>)> {
+        self.values
+            .iter()
+            .map(|(id, value)| (ValueId::new(self.id, id), value))
+    }
+
+    /// Iterate over all operations in the circuit.
+    pub fn all_operations(&self) -> impl Iterator<Item = Operation> + '_ {
+        let inputs = self
+            .inputs
+            .iter()
+            .map(|(key, _)| Operation::Input(InputId::new(self.id, key)));
+        let gates = self
+            .gates
+            .iter()
+            .map(|(key, _)| Operation::Gate(GateId::new(self.id, key)));
+        let clones = self
+            .clones
+            .iter()
+            .map(|(key, _)| Operation::Clone(CloneId::new(self.id, key)));
+        let drops = self
+            .drops
+            .iter()
+            .map(|(key, _)| Operation::Drop(DropId::new(self.id, key)));
+        let outputs = self
+            .outputs
+            .iter()
+            .map(|(key, _)| Operation::Output(OutputId::new(self.id, key)));
+        inputs
+            .chain(gates)
+            .chain(clones)
+            .chain(drops)
+            .chain(outputs)
+    }
+
+    /// Iterate over all outputs in the circuit.
+    pub fn all_outputs(&self) -> impl Iterator<Item = (OutputId, &OutputOp)> {
+        self.outputs
+            .iter()
+            .map(|(key, op)| (OutputId::new(self.id, key), op))
+    }
+
+    /// Iterate over all inputs in the circuit.
+    pub fn all_inputs(&self) -> impl Iterator<Item = (InputId, &InputOp)> {
+        self.inputs
+            .iter()
+            .map(|(key, op)| (InputId::new(self.id, key), op))
+    }
+
+    /// Iterate over all gates in the circuit.
+    pub fn all_gates(&self) -> impl Iterator<Item = (GateId, &GateOp<G>)> {
+        self.gates
+            .iter()
+            .map(|(key, op)| (GateId::new(self.id, key), op))
+    }
+
+    /// Iterate over all clones in the circuit.
+    pub fn all_clones(&self) -> impl Iterator<Item = (CloneId, &CloneOp)> {
+        self.clones
+            .iter()
+            .map(|(key, op)| (CloneId::new(self.id, key), op))
+    }
+
+    /// Iterate over all drops in the circuit.
+    pub fn all_drops(&self) -> impl Iterator<Item = (DropId, &DropOp)> {
+        self.drops
+            .iter()
+            .map(|(key, op)| (DropId::new(self.id, key), op))
+    }
+
+    /// Get an immutable reference to a value, validating circuit ownership.
+    pub fn value(&self, value: ValueId) -> Result<&Value<G>> {
+        self.validate_value(value)?;
+        self.values
+            .get(value.key())
+            .ok_or(Error::ValueNotFound(value))
+    }
+
+    /// Get a gate operation by id.
+    pub fn gate_op(&self, id: GateId) -> Result<&GateOp<G>> {
+        if id.circuit() != self.id {
+            return Err(Error::GateNotFound(id));
+        }
+        self.gates.get(id.key()).ok_or(Error::GateNotFound(id))
+    }
+
+    /// Get a clone operation by id.
+    pub fn clone_op(&self, id: CloneId) -> Result<&CloneOp> {
+        if id.circuit() != self.id {
+            return Err(Error::CloneNotFound(id));
+        }
+        self.clones.get(id.key()).ok_or(Error::CloneNotFound(id))
+    }
+
+    /// Get a drop operation by id.
+    pub fn drop_op(&self, id: DropId) -> Result<&DropOp> {
+        if id.circuit() != self.id {
+            return Err(Error::DropNotFound(id));
+        }
+        self.drops.get(id.key()).ok_or(Error::DropNotFound(id))
+    }
+
+    /// Get an input operation by id.
+    pub fn input_op(&self, id: InputId) -> Result<&InputOp> {
+        if id.circuit() != self.id {
+            return Err(Error::InputNotFound(id));
+        }
+        self.inputs.get(id.key()).ok_or(Error::InputNotFound(id))
+    }
+
+    /// Get an output operation by id.
+    pub fn output_op(&self, id: OutputId) -> Result<&OutputOp> {
+        if id.circuit() != self.id {
+            return Err(Error::OutputNotFound(id));
+        }
+        self.outputs.get(id.key()).ok_or(Error::OutputNotFound(id))
+    }
+
+    /// Get the values produced by an operation.
+    pub fn produced_values(&self, op: Operation) -> Result<Vec<ValueId>> {
+        match op {
+            Operation::Input(id) => {
+                let input = self.input_op(id)?;
+                Ok(vec![input.get_output()])
+            }
+            Operation::Gate(id) => {
+                let gate = self.gate_op(id)?;
+                Ok(gate.get_outputs().to_vec())
+            }
+            Operation::Clone(id) => {
+                let clone = self.clone_op(id)?;
+                Ok(clone.get_outputs().to_vec())
+            }
+            // Drops and outputs don't produce values.
+            Operation::Drop(_) | Operation::Output(_) => Ok(vec![]),
+        }
+    }
+}

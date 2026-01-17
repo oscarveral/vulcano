@@ -11,21 +11,24 @@ use crate::{
         analyses::value_liveness::ValueLiveness,
         {Analysis, Analyzer},
     },
-    circuit::Circuit,
+    circuit::{
+        Circuit,
+        subcircuit::{CircuitId, Subcircuit},
+        value::ValueId,
+    },
     error::{Error, Result},
     gate::Gate,
-    handles::ValueId,
 };
 
-/// Result of register allocation analysis.
-pub struct RegisterAllocation<G: Gate> {
+/// Per-subcircuit register allocation result.
+pub struct SubcircuitAllocation<G: Gate> {
     /// Map from ValueId to its register number.
     assignments: HashMap<ValueId, usize>,
     /// Peak register usage per operand type.
     peak_usage: HashMap<G::Operand, usize>,
 }
 
-impl<G: Gate> RegisterAllocation<G> {
+impl<G: Gate> SubcircuitAllocation<G> {
     /// Get the register number for a value.
     pub fn get(&self, value: ValueId) -> Option<usize> {
         self.assignments.get(&value).copied()
@@ -52,67 +55,104 @@ impl<G: Gate> RegisterAllocation<G> {
     }
 }
 
+/// Result of register allocation analysis.
+pub struct RegisterAllocation<G: Gate> {
+    /// Per-subcircuit results.
+    results: HashMap<CircuitId, SubcircuitAllocation<G>>,
+}
+
+impl<G: Gate> RegisterAllocation<G> {
+    /// Get the register allocation for a specific subcircuit.
+    pub fn for_subcircuit(&self, id: CircuitId) -> Option<&SubcircuitAllocation<G>> {
+        self.results.get(&id)
+    }
+
+    /// Iterate over all subcircuit results.
+    pub fn iter(&self) -> impl Iterator<Item = (CircuitId, &SubcircuitAllocation<G>)> {
+        self.results.iter().map(|(&id, alloc)| (id, alloc))
+    }
+}
+
 impl<G: Gate> Analysis<G> for RegisterAllocation<G> {
     type Output = Self;
 
     fn run(circuit: &Circuit<G>, analyzer: &mut Analyzer<G>) -> Result<Self::Output> {
         let liveness = analyzer.get::<ValueLiveness>(circuit)?;
 
-        // Group values by operand type.
-        let mut by_type: HashMap<G::Operand, Vec<(ValueId, usize, usize)>> = HashMap::new();
-        for (value_id, value) in circuit.all_values() {
-            let ty = value.get_type();
-            let range = liveness
-                .get(value_id)
-                .ok_or(Error::ValueNotFound(value_id))?;
-            by_type
-                .entry(ty)
-                .or_default()
-                .push((value_id, range.birth, range.death));
+        let mut results = HashMap::new();
+
+        for subcircuit in circuit.iter() {
+            let subcircuit_id = subcircuit.id();
+            let subcircuit_liveness = liveness
+                .for_subcircuit(subcircuit_id)
+                .ok_or(Error::SubcircuitAnalysisMissing(subcircuit_id))?;
+            let allocation = compute_register_allocation(subcircuit, subcircuit_liveness)?;
+            results.insert(subcircuit_id, allocation);
         }
 
-        let mut assignments = HashMap::new();
-        let mut peak_usage = HashMap::new();
+        Ok(RegisterAllocation { results })
+    }
+}
 
-        // Linear scan per operand type.
-        for (ty, mut values) in by_type {
-            // Sort by birth position.
-            values.sort_by_key(|(_, birth, _)| *birth);
+/// Compute register allocation for a single subcircuit using linear scan.
+fn compute_register_allocation<G: Gate>(
+    subcircuit: &Subcircuit<G>,
+    liveness: &crate::analyzer::analyses::value_liveness::SubcircuitLiveness,
+) -> Result<SubcircuitAllocation<G>> {
+    // Group values by operand type.
+    let mut by_type: HashMap<G::Operand, Vec<(ValueId, usize, usize)>> = HashMap::new();
+    for (value_id, value) in subcircuit.all_values() {
+        let ty = value.get_type();
+        let range = liveness
+            .get(value_id)
+            .ok_or(Error::ValueNotFound(value_id))?;
+        by_type
+            .entry(ty)
+            .or_default()
+            .push((value_id, range.birth, range.death));
+    }
 
-            // Active: (death, register), min-heap by death.
-            let mut active: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new();
-            // Free registers, min-heap by register number.
-            let mut free_regs: BinaryHeap<Reverse<usize>> = BinaryHeap::new();
-            let mut next_reg = 0usize;
+    let mut assignments = HashMap::new();
+    let mut peak_usage = HashMap::new();
 
-            for (value_id, birth, death) in values {
-                // Expire intervals that died before this birth.
-                while let Some(&Reverse((d, reg))) = active.peek() {
-                    if d <= birth {
-                        active.pop();
-                        free_regs.push(Reverse(reg));
-                    } else {
-                        break;
-                    }
+    // Linear scan per operand type.
+    for (ty, mut values) in by_type {
+        // Sort by birth position.
+        values.sort_by_key(|(_, birth, _)| *birth);
+
+        // Active: (death, register), min-heap by death.
+        let mut active: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new();
+        // Free registers, min-heap by register number.
+        let mut free_regs: BinaryHeap<Reverse<usize>> = BinaryHeap::new();
+        let mut next_reg = 0usize;
+
+        for (value_id, birth, death) in values {
+            // Expire intervals that died before this birth.
+            while let Some(&Reverse((d, reg))) = active.peek() {
+                if d <= birth {
+                    active.pop();
+                    free_regs.push(Reverse(reg));
+                } else {
+                    break;
                 }
-
-                // Assign register: reuse if available, else allocate new.
-                let reg = free_regs.pop().map(|Reverse(r)| r).unwrap_or_else(|| {
-                    let r = next_reg;
-                    next_reg += 1;
-                    r
-                });
-
-                assignments.insert(value_id, reg);
-                active.push(Reverse((death, reg)));
             }
 
-            peak_usage.insert(ty, next_reg);
+            // Assign register: reuse if available, else allocate new.
+            let reg = free_regs.pop().map(|Reverse(r)| r).unwrap_or_else(|| {
+                let r = next_reg;
+                next_reg += 1;
+                r
+            });
+
+            assignments.insert(value_id, reg);
+            active.push(Reverse((death, reg)));
         }
 
-        Ok(RegisterAllocation {
-            assignments,
-            peak_usage,
-        })
+        peak_usage.insert(ty, next_reg);
     }
+
+    Ok(SubcircuitAllocation {
+        assignments,
+        peak_usage,
+    })
 }
