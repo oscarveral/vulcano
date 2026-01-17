@@ -187,4 +187,9 @@ impl<G: Gate> Value<G> {
     pub fn remove_destinations_for(&mut self, consumer: Consumer) {
         self.destinations.retain(|d| d.consumer != consumer);
     }
+
+    /// Remove a destination at a specific index.
+    pub fn remove_destination_at(&mut self, index: usize) {
+        self.destinations.remove(index);
+    }
 }

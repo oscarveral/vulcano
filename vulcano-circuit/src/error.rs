@@ -6,7 +6,8 @@ use std::any::TypeId;
 
 use crate::circuit::{
     operations::{
-        Operation, clone::CloneId, drop::DropId, gate::GateId, input::InputId, output::OutputId,
+        Consumer, Operation, PortId, clone::CloneId, drop::DropId, gate::GateId, input::InputId,
+        output::OutputId,
     },
     subcircuit::CircuitId,
     value::ValueId,
@@ -59,6 +60,8 @@ pub enum Error {
     OperationNotScheduled(Operation),
     /// Subcircuit analysis result missing.
     SubcircuitAnalysisMissing(CircuitId),
+    /// Destination not found when trying to rewire.
+    DestinationNotFound(ValueId, Consumer, PortId),
 }
 
 impl std::fmt::Display for Error {
@@ -133,6 +136,13 @@ impl std::fmt::Display for Error {
             }
             Error::SubcircuitAnalysisMissing(id) => {
                 write!(f, "subcircuit analysis result missing: {:?}", id)
+            }
+            Error::DestinationNotFound(value, consumer, port) => {
+                write!(
+                    f,
+                    "destination not found for value {:?} at consumer {:?} port {:?}",
+                    value, consumer, port
+                )
             }
         }
     }

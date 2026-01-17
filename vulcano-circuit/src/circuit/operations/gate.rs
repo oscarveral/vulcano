@@ -84,4 +84,13 @@ impl<G: Gate> GateOp<G> {
     pub fn get_outputs(&self) -> &[ValueId] {
         &self.outputs
     }
+
+    /// Set an input value at the given port index.
+    pub fn set_input(&mut self, port: usize, value: ValueId) -> Result<()> {
+        if port >= self.inputs.len() {
+            return Err(Error::InvalidInputCount(self.inputs.len(), port + 1));
+        }
+        self.inputs[port] = value;
+        Ok(())
+    }
 }

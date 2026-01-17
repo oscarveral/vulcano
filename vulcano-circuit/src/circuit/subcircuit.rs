@@ -477,4 +477,117 @@ impl<G: Gate> Subcircuit<G> {
             Operation::Drop(_) | Operation::Output(_) => Ok(vec![]),
         }
     }
+
+    /// Get all move destinations for a value.
+    pub fn get_move_destinations(&self, value: ValueId) -> Result<Vec<Destination>> {
+        let val = self.value(value)?;
+        Ok(val
+            .get_destinations()
+            .iter()
+            .filter(|d| d.get_mode() == Ownership::Move)
+            .cloned()
+            .collect())
+    }
+
+    /// Rewire a destination from one value to another.
+    ///
+    /// Finds where `old_value` is consumed by the given consumer/port and changes
+    /// it to consume `new_value` instead.
+    pub fn rewire_destination(
+        &mut self,
+        old_value: ValueId,
+        new_value: ValueId,
+        consumer: Consumer,
+        port: PortId,
+    ) -> Result<()> {
+        // Validate both values exist.
+        self.validate_value(old_value)?;
+        self.validate_value(new_value)?;
+
+        // Find and remove the destination from old_value.
+        let old_val = self
+            .values
+            .get_mut(old_value.key())
+            .ok_or(Error::ValueNotFound(old_value))?;
+
+        let dest_idx = old_val
+            .get_destinations()
+            .iter()
+            .position(|d| d.get_consumer() == consumer && d.get_port() == port)
+            .ok_or(Error::DestinationNotFound(old_value, consumer, port))?;
+
+        let destination = old_val.get_destinations()[dest_idx];
+        old_val.remove_destination_at(dest_idx);
+
+        // Add the destination to new_value.
+        let new_val = self
+            .values
+            .get_mut(new_value.key())
+            .ok_or(Error::ValueNotFound(new_value))?;
+        new_val.add_destination(destination);
+
+        // Update the consumer's input to point to new_value.
+        match consumer {
+            Consumer::Gate(gate_id) => {
+                let gate = self
+                    .gates
+                    .get_mut(gate_id.key())
+                    .ok_or(Error::GateNotFound(gate_id))?;
+                gate.set_input(port.index(), new_value)?;
+            }
+            Consumer::Drop(drop_id) => {
+                let drop_op = self
+                    .drops
+                    .get_mut(drop_id.key())
+                    .ok_or(Error::DropNotFound(drop_id))?;
+                drop_op.set_input(new_value);
+            }
+            Consumer::Output(output_id) => {
+                let output = self
+                    .outputs
+                    .get_mut(output_id.key())
+                    .ok_or(Error::OutputNotFound(output_id))?;
+                output.set_input(new_value);
+            }
+            Consumer::Clone(clone_id) => {
+                let clone_op = self
+                    .clones
+                    .get_mut(clone_id.key())
+                    .ok_or(Error::CloneNotFound(clone_id))?;
+                clone_op.set_input(new_value);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Remove a gate without checking references.
+    pub fn remove_gate_unchecked(&mut self, id: GateId) {
+        self.gates.remove(id.key());
+    }
+
+    /// Remove a clone without checking references.
+    pub fn remove_clone_unchecked(&mut self, id: CloneId) {
+        self.clones.remove(id.key());
+    }
+
+    /// Remove a drop without checking references.
+    pub fn remove_drop_unchecked(&mut self, id: DropId) {
+        self.drops.remove(id.key());
+    }
+
+    /// Remove an input without checking references.
+    pub fn remove_input_unchecked(&mut self, id: InputId) {
+        self.inputs.remove(id.key());
+    }
+
+    /// Remove an output without checking references.
+    pub fn remove_output_unchecked(&mut self, id: OutputId) {
+        self.outputs.remove(id.key());
+    }
+
+    /// Remove a value without checking references.
+    pub fn remove_value_unchecked(&mut self, id: ValueId) {
+        self.values.remove(id.key());
+    }
 }

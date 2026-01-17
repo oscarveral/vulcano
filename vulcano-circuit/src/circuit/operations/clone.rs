@@ -62,4 +62,9 @@ impl CloneOp {
     pub fn output_count(&self) -> usize {
         self.outputs.len()
     }
+
+    /// Set the input value.
+    pub fn set_input(&mut self, value: ValueId) {
+        self.input = value;
+    }
 }

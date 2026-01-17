@@ -50,4 +50,9 @@ impl OutputOp {
     pub fn get_input(&self) -> ValueId {
         self.input
     }
+
+    /// Set the input value.
+    pub fn set_input(&mut self, value: ValueId) {
+        self.input = value;
+    }
 }
