@@ -2,12 +2,13 @@
 //!
 //! Removes unreachable operations and values from the circuit.
 //! Modifies the circuit in-place by removing elements that don't contribute to outputs.
+//! Also removes empty subcircuits.
 
 use std::any::TypeId;
 
 use crate::{
     analyzer::{Analyzer, analyses::element_reachability::ElementReachability},
-    circuit::{Circuit, operations::Operation},
+    circuit::{Circuit, operations::Operation, subcircuit::CircuitId},
     error::{Error, Result},
     gate::Gate,
 };
@@ -22,12 +23,16 @@ pub fn dead_code_elimination<G: Gate>(
     // Track if any changes were made.
     let mut made_changes = false;
 
+    // Collect subcircuit IDs first (can't iterate and remove at the same time).
+    let subcircuit_ids: Vec<CircuitId> = circuit.iter().map(|s| s.id()).collect();
+
     // Process each subcircuit.
-    for subcircuit in circuit.iter_mut() {
-        let subcircuit_id = subcircuit.id();
+    for subcircuit_id in &subcircuit_ids {
         let reach = reachability
-            .for_subcircuit(subcircuit_id)
-            .ok_or(Error::SubcircuitAnalysisMissing(subcircuit_id))?;
+            .for_subcircuit(*subcircuit_id)
+            .ok_or(Error::SubcircuitAnalysisMissing(*subcircuit_id))?;
+
+        let subcircuit = circuit.get_mut(*subcircuit_id).unwrap();
 
         // Check early exit: if all operations are reachable, skip this subcircuit.
         let total_ops = subcircuit.all_operations().count();
@@ -74,8 +79,7 @@ pub fn dead_code_elimination<G: Gate>(
             .map(|(id, _)| id)
             .collect();
 
-        // Safe because reachability analysis guarantees unreachable elements
-        // are not referenced by any reachable elements.
+        // Safe because reachability analysis guarantees unreachable elements are not referenced by any reachable elements.
         for id in unreachable_gates {
             subcircuit.remove_gate_unchecked(id);
         }
@@ -93,6 +97,14 @@ pub fn dead_code_elimination<G: Gate>(
         }
         for id in unreachable_values {
             subcircuit.remove_value_unchecked(id);
+        }
+    }
+
+    // Remove empty subcircuits.
+    for subcircuit_id in subcircuit_ids {
+        if circuit.get(subcircuit_id).is_some_and(|s| s.is_empty()) {
+            circuit.remove_subcircuit(subcircuit_id);
+            made_changes = true;
         }
     }
 

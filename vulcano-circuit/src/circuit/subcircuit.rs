@@ -4,6 +4,8 @@
 //! assignment form of values produced and consumed or borrowed
 //! in order to create or output other values.
 
+use std::collections::HashMap;
+
 use vulcano_arena::{Arena, Key};
 
 use crate::{
@@ -589,5 +591,165 @@ impl<G: Gate> Subcircuit<G> {
     /// Remove a value without checking references.
     pub fn remove_value_unchecked(&mut self, id: ValueId) {
         self.values.remove(id.key());
+    }
+
+    /// Check if the subcircuit is empty.
+    pub fn is_empty(&self) -> bool {
+        self.gates.is_empty()
+            && self.clones.is_empty()
+            && self.drops.is_empty()
+            && self.inputs.is_empty()
+            && self.outputs.is_empty()
+            && self.values.is_empty()
+    }
+
+    /// Split off a subset of operations into a new subcircuit.
+    ///
+    /// Extracts the specified operations and their associated values from this
+    /// subcircuit and creates a new subcircuit containing them. The new subcircuit
+    /// is assigned the provided ID.
+    ///
+    /// Operations must form a complete connected component.
+    pub fn split(&mut self, new_id: CircuitId, ops_to_extract: &[Operation]) -> Result<Self> {
+        // Create the new subcircuit.
+        let mut new_subcircuit = Subcircuit::new(new_id);
+
+        // Mapping from old value keys to new ValueIds.
+        let mut value_map: HashMap<Key, ValueId> = HashMap::new();
+
+        // Phase 1: Extract inputs (they produce values with no dependencies).
+        for &op in ops_to_extract {
+            if let Operation::Input(input_id) = op
+                && let Some(input_op) = self.inputs.remove(input_id.key())
+            {
+                let old_value_id = input_op.get_output();
+                if let Some(old_value) = self.values.remove(old_value_id.key()) {
+                    let operand = old_value.get_type();
+                    let (_, new_value_id) = new_subcircuit.add_input(operand)?;
+                    value_map.insert(old_value_id.key(), new_value_id);
+                }
+            }
+        }
+
+        // Phase 2: Extract gates (topological order not needed if component is valid).
+        // We may need multiple passes for gates that depend on other gates.
+        let mut remaining_gates: Vec<GateId> = ops_to_extract
+            .iter()
+            .filter_map(|op| {
+                if let Operation::Gate(id) = op {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let mut progress = true;
+        while progress && !remaining_gates.is_empty() {
+            progress = false;
+            remaining_gates.retain(|&gate_id| {
+                let gate_op = match self.gates.get(gate_id.key()) {
+                    Some(g) => g,
+                    None => return false, // Already processed.
+                };
+
+                // Check if all inputs are mapped.
+                let all_inputs_ready = gate_op
+                    .get_inputs()
+                    .iter()
+                    .all(|v| value_map.contains_key(&v.key()));
+
+                if !all_inputs_ready {
+                    return true; // Keep for next iteration.
+                }
+
+                // Extract the gate.
+                let gate_op = self.gates.remove(gate_id.key()).unwrap();
+                let gate = *gate_op.get_gate();
+
+                // Map inputs.
+                let new_inputs: Vec<ValueId> = gate_op
+                    .get_inputs()
+                    .iter()
+                    .map(|v| value_map[&v.key()])
+                    .collect();
+
+                // Collect output types and remove old values.
+                let output_info: Vec<(Key, G::Operand)> = gate_op
+                    .get_outputs()
+                    .iter()
+                    .filter_map(|v| {
+                        let old_value = self.values.remove(v.key())?;
+                        Some((v.key(), old_value.get_type()))
+                    })
+                    .collect();
+
+                // Add gate to new subcircuit.
+                if let Ok((_, new_outputs)) = new_subcircuit.add_gate(&new_inputs, gate) {
+                    for ((old_key, _), new_value_id) in output_info.iter().zip(new_outputs.iter()) {
+                        value_map.insert(*old_key, *new_value_id);
+                    }
+                }
+
+                progress = true;
+                false // Processed, remove from remaining.
+            });
+        }
+
+        // Phase 3: Extract clones.
+        for &op in ops_to_extract {
+            if let Operation::Clone(clone_id) = op
+                && let Some(clone_op) = self.clones.remove(clone_id.key())
+            {
+                let input_key = clone_op.get_input().key();
+                if let Some(&new_input) = value_map.get(&input_key) {
+                    let quantity = clone_op.output_count();
+
+                    // Collect old output keys.
+                    let old_output_keys: Vec<Key> =
+                        clone_op.get_outputs().iter().map(|v| v.key()).collect();
+
+                    // Remove old values.
+                    for key in &old_output_keys {
+                        self.values.remove(*key);
+                    }
+
+                    // Add clone to new subcircuit.
+                    if let Ok((_, new_outputs)) = new_subcircuit.add_clone(new_input, quantity) {
+                        for (old_key, new_value_id) in
+                            old_output_keys.iter().zip(new_outputs.iter())
+                        {
+                            value_map.insert(*old_key, *new_value_id);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Phase 4: Extract drops.
+        for &op in ops_to_extract {
+            if let Operation::Drop(drop_id) = op
+                && let Some(drop_op) = self.drops.remove(drop_id.key())
+            {
+                let input_key = drop_op.get_input().key();
+                if let Some(&new_input) = value_map.get(&input_key) {
+                    let _ = new_subcircuit.add_drop(new_input);
+                }
+            }
+        }
+
+        // Phase 5: Extract outputs.
+        for &op in ops_to_extract {
+            if let Operation::Output(output_id) = op
+                && let Some(output_op) = self.outputs.remove(output_id.key())
+            {
+                let input_key = output_op.get_input().key();
+                if let Some(&new_input) = value_map.get(&input_key) {
+                    let _ = new_subcircuit.add_output(new_input);
+                }
+            }
+        }
+
+        Ok(new_subcircuit)
     }
 }

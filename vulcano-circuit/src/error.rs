@@ -62,6 +62,8 @@ pub enum Error {
     SubcircuitAnalysisMissing(CircuitId),
     /// Destination not found when trying to rewire.
     DestinationNotFound(ValueId, Consumer, PortId),
+    /// Subcircuit not found.
+    CircuitNotFound(CircuitId),
 }
 
 impl std::fmt::Display for Error {
@@ -143,6 +145,9 @@ impl std::fmt::Display for Error {
                     "destination not found for value {:?} at consumer {:?} port {:?}",
                     value, consumer, port
                 )
+            }
+            Error::CircuitNotFound(id) => {
+                write!(f, "subcircuit not found: {:?}", id)
             }
         }
     }

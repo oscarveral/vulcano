@@ -5,7 +5,10 @@
 use vulcano_arena::Arena;
 
 use crate::{
-    circuit::subcircuit::{CircuitId, Subcircuit},
+    circuit::{
+        operations::Operation,
+        subcircuit::{CircuitId, Subcircuit},
+    },
     error::{Error, Result},
     gate::Gate,
 };
@@ -76,6 +79,37 @@ impl<G: Gate> Circuit<G> {
     /// Remove a subcircuit from the circuit.
     pub fn remove_subcircuit(&mut self, id: CircuitId) -> Option<Subcircuit<G>> {
         self.subcircuits.remove(id.key())
+    }
+
+    /// Split a subset of operations from a subcircuit into a new subcircuit.
+    ///
+    /// Extracts the specified operations and their associated values from the
+    /// source subcircuit and creates a new subcircuit containing them.
+    ///
+    /// Returns the ID of the newly created subcircuit.
+    pub fn split_subcircuit(
+        &mut self,
+        source_id: CircuitId,
+        ops_to_extract: &[Operation],
+    ) -> Result<CircuitId> {
+        // Allocate a new subcircuit ID.
+        let new_key = self.subcircuits.reserve();
+        let new_id = CircuitId::new(new_key);
+
+        // Get the source subcircuit and split off the operations.
+        let source = self
+            .subcircuits
+            .get_mut(source_id.key())
+            .ok_or(Error::CircuitNotFound(source_id))?;
+
+        let new_subcircuit = source.split(new_id, ops_to_extract)?;
+
+        // Insert the new subcircuit.
+        self.subcircuits
+            .fill(new_id.key(), new_subcircuit)
+            .map_err(|_| Error::FailedToCreateCircuit(new_id))?;
+
+        Ok(new_id)
     }
 }
 
