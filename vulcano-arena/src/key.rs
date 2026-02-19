@@ -1,26 +1,26 @@
 //! Key type for the arena.
 
-/// A key with index and generation for arena access.
+/// A key with index and version for arena access.
 ///
 /// Keys are stable references to slots in the arena. Even after deletion
 /// and reuse of a slot, old keys will fail to access the new data due to
-/// generation mismatch.
+/// version mismatch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Key {
     /// Index into the arena's slot array.
-    pub(crate) index: u32,
-    /// Generation counter to detect stale keys.
-    pub(crate) generation: u32,
+    pub(crate) index: usize,
+    /// Version counter to detect stale keys.
+    pub(crate) version: usize,
 }
 
 impl Key {
     /// Returns the index portion of the key.
     pub fn index(&self) -> usize {
-        self.index as usize
+        self.index
     }
 
-    /// Returns the generation portion of the key.
-    pub fn generation(&self) -> u32 {
-        self.generation
+    /// Returns the version portion of the key.
+    pub fn version(&self) -> usize {
+        self.version
     }
 }

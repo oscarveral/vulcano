@@ -10,5 +10,5 @@ mod key;
 #[cfg(test)]
 mod tests;
 
-pub use arena::Arena;
+pub use arena::{Arena, Drain, IntoIter, Iter, IterMut};
 pub use key::Key;
